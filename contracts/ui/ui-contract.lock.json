@@ -1,7 +1,7 @@
 {
   "contractVersion": "1.1.0",
   "artifacts": {
-    ".github/workflows/ui-contract.yml": "0726c1fd74252a789f3aa726b3538b7717cad07d559e961579d2a2998a919719",
+    ".github/workflows/ui-contract.yml": "60482da187600885468a7b0c874d986483620bba1693eb46c2f059cf0959cab3",
     "assets/designs/tools-manager-ui/baselines/dashboard-success-1024x720.png": "dc25685b7cc26ac7cef5f58837538ae587270e23064dfa65d537623bb7f4c083",
     "assets/designs/tools-manager-ui/baselines/dashboard-success-1280x800.png": "4aa4556fbcfb2bb9846137a1572b75fbe2cdeb3c5237a42d87c6fd26db0950ef",
     "assets/designs/tools-manager-ui/baselines/dashboard-success-1440x900.png": "ace31289b3acc02894fd1e580de49e2ddbf09376923f6448f0d0652765392b29",
