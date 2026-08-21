@@ -51,10 +51,10 @@ jobs:
         run: cargo fmt --check
 
       - name: Rust clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy -p tools-manager-core --all-targets -- -D warnings
 
       - name: Rust tests
-        run: cargo test --workspace
+        run: cargo test -p tools-manager-core
 
   desktop-integration:
     runs-on: macos-latest
@@ -77,9 +77,16 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
+          components: clippy
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
+
+      - name: Build frontend assets
+        run: pnpm build
+
+      - name: Rust clippy
+        run: cargo clippy -p stm-desktop --all-targets -- -D warnings
 
       - name: Run desktop Phase 4 verification
         run: pnpm verify:phase-four-desktop

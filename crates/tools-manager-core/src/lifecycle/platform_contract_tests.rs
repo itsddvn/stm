@@ -41,6 +41,7 @@ mod linux {
                 command.executable.to_str().expect("UTF-8 executable"),
                 &command.argv,
                 &command.identities,
+                &|_| Ok(()),
                 &CancelSignal::default(),
             )
             .expect("execute reviewed command");
@@ -267,6 +268,7 @@ mod windows {
                 command.executable.to_str().expect("UTF-8 executable"),
                 &command.argv,
                 &command.identities,
+                &|_| Ok(()),
                 &CancelSignal::default(),
             )
             .expect("execute WinGet command");

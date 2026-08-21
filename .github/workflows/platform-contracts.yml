@@ -77,7 +77,7 @@ jobs:
           -v "${{ github.workspace }}:/workspace"
           -w /workspace
           rust:1.88-bookworm
-          bash -lc "apt-get update && cargo test -p tools-manager-core
+          bash -c "apt-get update && /usr/local/cargo/bin/cargo test -p tools-manager-core
           lifecycle::platform_contract_tests::linux::disposable_apt_install_rescan_noop_uninstall
           -- --ignored --exact --nocapture"
 
@@ -133,12 +133,13 @@ jobs:
           -v "${{ github.workspace }}:/workspace:ro"
           -w /workspace
           rust:1.88-bookworm
-          bash -lc "useradd --create-home stm &&
-          mkdir -p /tmp/stm-target &&
-          chown -R stm:stm /tmp/stm-target &&
+          bash -c "useradd --create-home stm &&
+          mkdir -p /tmp/stm-target /tmp/stm-cargo &&
+          chown -R stm:stm /tmp/stm-target /tmp/stm-cargo &&
           su -s /bin/bash stm -c
-          'export CARGO_TARGET_DIR=/tmp/stm-target STM_DISPOSABLE_LIFECYCLE=1;
-          cargo test -p tools-manager-core
+          'export HOME=/home/stm CARGO_HOME=/tmp/stm-cargo RUSTUP_HOME=/usr/local/rustup
+          CARGO_TARGET_DIR=/tmp/stm-target STM_DISPOSABLE_LIFECYCLE=1;
+          /usr/local/cargo/bin/cargo test -p tools-manager-core
           lifecycle::service_tests::tests::missing_non_root_privilege_broker_degrades_to_detect_only
           -- --ignored --exact --nocapture'"
 

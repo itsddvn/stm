@@ -84,36 +84,22 @@ fn inspect_homebrew(
         CoreError::MalformedInput("Homebrew returned no matching package metadata".to_string())
     })?;
 
-    let (current_version, target_version) = if mapping.adapter == "homebrew_cask" {
-        let current = entry
-            .get("installed")
-            .and_then(JsonValue::as_array)
-            .and_then(|items| items.last())
-            .and_then(JsonValue::as_str)
-            .map(str::to_string);
-        let target = entry
+    let current_version = homebrew_installed_version(entry);
+    let target_version = if mapping.adapter == "homebrew_cask" {
+        entry
             .get("version")
             .and_then(JsonValue::as_str)
             .ok_or_else(|| CoreError::MalformedInput("Homebrew cask version missing".to_string()))?
-            .to_string();
-        (current, target)
+            .to_string()
     } else {
-        let current = entry
-            .get("installed")
-            .and_then(JsonValue::as_array)
-            .and_then(|items| items.last())
-            .and_then(|item| item.get("version"))
-            .and_then(JsonValue::as_str)
-            .map(str::to_string);
-        let target = entry
+        entry
             .get("versions")
             .and_then(|versions| versions.get("stable"))
             .and_then(JsonValue::as_str)
             .ok_or_else(|| {
                 CoreError::MalformedInput("Homebrew formula version missing".to_string())
             })?
-            .to_string();
-        (current, target)
+            .to_string()
     };
 
     let mut outdated_args = vec!["outdated".to_string(), "--json=v2".to_string()];
@@ -309,6 +295,21 @@ fn homebrew_package_entry<'a>(value: &'a JsonValue, package_id: &str) -> Option<
     })
 }
 
+fn homebrew_installed_version(entry: &JsonValue) -> Option<String> {
+    entry
+        .get("installed")
+        .and_then(|installed| {
+            installed.as_str().map(str::to_string).or_else(|| {
+                let value = installed.as_array()?.last()?;
+                value
+                    .as_str()
+                    .or_else(|| value.get("version").and_then(JsonValue::as_str))
+                    .map(str::to_string)
+            })
+        })
+        .filter(|version| !version.is_empty())
+}
+
 fn package_version(value: &JsonValue, package_id: &str) -> Option<String> {
     match value {
         JsonValue::Object(object) => {
@@ -370,6 +371,30 @@ pub(super) fn read_only_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_homebrew_installed_version_from_formula_and_cask_metadata() {
+        assert_eq!(
+            homebrew_installed_version(&serde_json::json!({
+                "installed": [{ "version": "1.2.3" }]
+            }))
+            .as_deref(),
+            Some("1.2.3")
+        );
+        assert_eq!(
+            homebrew_installed_version(&serde_json::json!({
+                "installed": "latest"
+            }))
+            .as_deref(),
+            Some("latest")
+        );
+        assert_eq!(
+            homebrew_installed_version(&serde_json::json!({
+                "installed": null
+            })),
+            None
+        );
+    }
 
     #[test]
     fn reads_winget_structured_export_and_locale_independent_version_rows() {
