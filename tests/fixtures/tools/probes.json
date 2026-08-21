@@ -1,0 +1,12 @@
+[
+  { "toolId": "git", "alias": "git", "path": "/usr/bin/git", "output": "git version 2.51.0" },
+  { "toolId": "orca-ade", "alias": "orca", "path": "/Applications/Orca.app/Contents/MacOS/orca", "output": "Orca 0.9.4" },
+  { "toolId": "cmux-desktop", "alias": "cmux", "path": "/Applications/cmux.app/Contents/MacOS/cmux", "output": "cmux 1.8.2" },
+  { "toolId": "docker-desktop", "alias": "docker-desktop", "path": "/Applications/Docker.app/Contents/MacOS/Docker Desktop", "output": "Docker Desktop 4.44.2" },
+  { "toolId": "orbstack", "alias": "orbstack", "path": "/Applications/OrbStack.app/Contents/MacOS/OrbStack", "output": "OrbStack 2.2.1" },
+  { "toolId": "agentkit-cli", "alias": "ak", "path": "/opt/homebrew/bin/ak", "output": "agentkit 0.18.3" },
+  { "toolId": "oh-my-pi", "alias": "omp", "path": "/usr/local/bin/omp", "output": "omp 0.7.8" },
+  { "toolId": "codex-cli", "alias": "codex", "path": "/opt/homebrew/bin/codex", "output": "codex 0.31.0" },
+  { "toolId": "grok-build", "alias": "grok", "path": "/usr/local/bin/grok", "output": "grok 0.4.2" },
+  { "toolId": "cloudflared", "alias": "cloudflared", "path": "/opt/homebrew/bin/cloudflared", "output": "cloudflared 2026.7.0" }
+]

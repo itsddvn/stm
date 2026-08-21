@@ -1,0 +1,34 @@
+name: UI Contract
+
+on:
+  pull_request:
+    paths:
+      - "contracts/ui/**"
+      - "src/**"
+      - "tests/fixtures/ui-contract/**"
+      - "assets/designs/tools-manager-ui/**"
+      - "docs/design-guidelines.md"
+      - "docs/ui-interaction-contract.md"
+      - "scripts/verify-ui-contract.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  push:
+    branches: [main]
+
+jobs:
+  verify-ui-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:ui-contract
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

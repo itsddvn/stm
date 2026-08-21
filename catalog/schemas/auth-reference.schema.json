@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/auth-reference.schema.json",
+  "title": "STM Auth Reference",
+  "type": "object",
+  "required": ["kind", "reference"],
+  "properties": {
+    "kind": {
+      "enum": ["env_var", "header_name", "token_alias", "file_reference"]
+    },
+    "reference": {
+      "type": "string"
+    }
+  }
+}

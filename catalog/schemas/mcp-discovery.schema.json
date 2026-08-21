@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/mcp-discovery.schema.json",
+  "title": "STM MCP Discovery Report",
+  "type": "object",
+  "required": ["servers", "malformedEntries", "warnings"],
+  "properties": {
+    "servers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "source",
+          "transport",
+          "commandOrUrl",
+          "args",
+          "authReferences",
+          "clients",
+          "capabilities",
+          "trust",
+          "authState",
+          "health",
+          "lastChecked",
+          "state"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "source": { "type": "string" },
+          "transport": { "enum": ["stdio", "streamable_http", "sse"] },
+          "commandOrUrl": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "authReferences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "reference"],
+              "properties": {
+                "kind": { "enum": ["env_var", "header_name", "token_alias", "file_reference"] },
+                "reference": { "type": "string" }
+              }
+            }
+          },
+          "clients": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["client", "state", "scope"],
+              "properties": {
+                "client": { "enum": ["Codex", "Claude Code", "Cursor"] },
+                "state": { "enum": ["enabled", "disabled", "unsupported"] },
+                "scope": { "enum": ["global"] }
+              }
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "trust": { "enum": ["verified", "review_required", "blocked"] },
+          "authState": { "enum": ["none", "reference_configured", "reference_missing"] },
+          "health": { "enum": ["healthy", "degraded", "unreachable", "unknown"] },
+          "lastChecked": { "type": "string" },
+          "state": {
+            "enum": [
+              "managed_current",
+              "managed_update_available",
+              "blocked",
+              "external",
+              "modified",
+              "missing",
+              "unsupported",
+              "manager_unavailable",
+              "source_unavailable",
+              "invalid",
+              "conflict",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "malformedEntries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["client", "entryName", "reason"],
+        "properties": {
+          "client": { "enum": ["Codex", "Claude Code", "Cursor"] },
+          "entryName": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

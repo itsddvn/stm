@@ -1,0 +1,31 @@
+[workspace]
+members = ["crates/tools-manager-core", "src-tauri"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+rust-version = "1.88.0"
+version = "0.1.0"
+authors = ["itsddvn"]
+repository = "https://example.invalid/tools-managers"
+homepage = "https://example.invalid/tools-managers"
+
+[workspace.dependencies]
+regex = "1.11.1"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+open = "5.3.2"
+reqwest = { version = "0.12.22", default-features = false, features = ["blocking", "rustls-tls"] }
+serde = { version = "1.0.219", features = ["derive"] }
+sha2 = "0.10.9"
+serde_json = "1.0.140"
+tauri = { version = "=2.11.2", features = [] }
+tauri-build = { version = "=2.6.2" }
+tauri-plugin-single-instance = "=2.4.3"
+tempfile = "3.20.0"
+libc = "0.2.175"
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading"] }
+thiserror = "2.0.12"
+time = { version = "0.3.41", features = ["formatting", "parsing"] }
+toml = "0.8.19"
+url = { version = "2.5.4", features = ["serde"] }

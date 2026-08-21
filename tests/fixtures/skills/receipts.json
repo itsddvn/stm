@@ -1,0 +1,65 @@
+[
+  {
+    "id": "frontend-design",
+    "name": "Frontend Design",
+    "description": "Build high-fidelity product interfaces from references.",
+    "source": "agentkit/skills",
+    "revision": "v2.0.0 · 7f84c21",
+    "digest": "auto",
+    "purposes": ["Design", "Frontend"],
+    "targets": [
+      { "client": "Codex", "relativePath": "$HOME/.codex/skills/frontend-design" },
+      { "client": "AgentKit", "relativePath": "$HOME/.agents/skills/frontend-design" }
+    ]
+  },
+  {
+    "id": "security-scan",
+    "name": "Security Scan",
+    "description": "Audit code for secrets and vulnerable patterns.",
+    "source": "agentkit/skills",
+    "revision": "v1.4.2 · 9a12be0",
+    "digest": "auto",
+    "purposes": ["Security", "Code review"],
+    "targets": [
+      { "client": "Codex", "relativePath": "$HOME/.codex/skills/security-scan" }
+    ]
+  },
+  {
+    "id": "release-pilot",
+    "name": "Release Pilot",
+    "description": "Prepare and validate project releases.",
+    "source": "trusted-catalog/release-pilot",
+    "revision": "v1.3.0 · d24b80c",
+    "digest": "managed-release-pilot",
+    "purposes": ["DevOps", "Release"],
+    "targets": [
+      { "client": "Claude Code", "relativePath": "$HOME/.claude/skills/release-pilot" },
+      { "client": "AgentKit", "relativePath": "$HOME/.agents/skills/release-pilot" }
+    ]
+  },
+  {
+    "id": "browser-control",
+    "name": "Browser Control",
+    "description": "Drive browser workflows through approved controls.",
+    "source": "trusted-catalog/browser-control",
+    "revision": "v0.8.0 · 128ab6f",
+    "digest": "auto",
+    "purposes": ["Browser", "Integrations"],
+    "targets": [
+      { "client": "Codex", "relativePath": "$HOME/.codex/skills/browser-control" },
+      { "client": "Claude Code", "relativePath": "$HOME/.claude/skills/browser-control" }
+    ]
+  },
+  {
+    "id": "database-operations",
+    "name": "Database Operations",
+    "description": "Plan and review safe database maintenance workflows.",
+    "source": "trusted-catalog/database-operations",
+    "revision": "Not installed",
+    "digest": "missing-database-operations",
+    "purposes": ["Data", "DevOps"],
+    "targets": [
+      { "client": "Codex", "relativePath": "$HOME/.codex/skills/database-operations" }
+    ]
+  }
+]

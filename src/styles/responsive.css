@@ -1,0 +1,27 @@
+@media (max-width: 1180px) {
+  :root { --sidebar-width: 208px; }
+  .main-content { padding: var(--space-4); }
+  .master-detail-layout { grid-template-columns: minmax(360px, 0.9fr) minmax(392px, 1.1fr); }
+  .resource-row { grid-template-columns: 36px minmax(120px, 1fr) auto; }
+  .resource-row .ownership-rail { display: none; }
+  .updates-layout, .history-layout { grid-template-columns: minmax(0, 1fr) 280px; }
+  .update-row, .table-header { grid-template-columns: 44px minmax(160px, 1fr) minmax(150px, 0.8fr) minmax(130px, 0.7fr); }
+  .update-row > :last-child, .updates-table > .table-header > :last-child { display: none; }
+  .history-columns { grid-template-columns: 120px minmax(140px, 1fr) 120px minmax(130px, 0.8fr); }
+  .history-row > :last-child, .history-table > .table-header > :last-child { display: none; }
+  .diagnostic-section { grid-template-columns: 1fr 1fr; }
+  .diagnostic-section button { grid-column: 1 / -1; width: max-content; }
+}
+
+@media (max-height: 760px) {
+  .sidebar { padding-top: var(--space-2); padding-bottom: var(--space-2); }
+  .brand-lockup { padding-bottom: var(--space-2); }
+  .sidebar nav { margin-top: var(--space-2); }
+  .sidebar nav a { min-height: 44px; }
+  .main-content { padding-top: var(--space-4); }
+  .page-header h1 { font-size: 2.25rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+}

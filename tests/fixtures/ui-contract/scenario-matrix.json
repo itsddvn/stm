@@ -1,0 +1,17 @@
+{
+  "contractVersion": "1.1.0-review",
+  "scenarios": [
+    { "id": "success", "loadState": "ready", "reasonCode": null, "expectedSurface": "populated inventory" },
+    { "id": "empty", "loadState": "empty", "reasonCode": "inventory.empty", "expectedSurface": "empty guidance" },
+    { "id": "loading", "loadState": "loading", "reasonCode": "inventory.loading", "expectedSurface": "skeleton table" },
+    { "id": "partial", "loadState": "partial", "reasonCode": "inventory.partial", "expectedSurface": "partial inventory warning" },
+    { "id": "stale", "loadState": "ready", "reasonCode": "inventory.stale", "expectedSurface": "freshness warning" },
+    { "id": "unsupported", "loadState": "ready", "reasonCode": "mapping.unsupported", "expectedSurface": "unsupported mapping" },
+    { "id": "blocked", "loadState": "ready", "reasonCode": "mapping.blocked", "expectedSurface": "policy block" },
+    { "id": "manager_unavailable", "loadState": "ready", "reasonCode": "manager.unavailable", "expectedSurface": "manager prerequisite" },
+    { "id": "offline", "loadState": "ready", "reasonCode": "network.offline", "expectedSurface": "cached inventory" },
+    { "id": "cancelled", "loadState": "ready", "reasonCode": "operation.cancelled", "expectedSurface": "cancelled operation" },
+    { "id": "failure", "loadState": "error", "reasonCode": "operation.failed", "expectedSurface": "failure recovery" },
+    { "id": "recovery", "loadState": "ready", "reasonCode": "operation.recovery_available", "expectedSurface": "rollback action" }
+  ]
+}

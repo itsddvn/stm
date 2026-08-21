@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/mcp-server.schema.json",
+  "title": "STM MCP Server Record",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "description",
+    "source",
+    "transport",
+    "commandOrUrl",
+    "args",
+    "authReferences",
+    "clients",
+    "capabilities",
+    "trust",
+    "authState",
+    "health",
+    "lastChecked",
+    "state"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "source": { "type": "string" },
+    "transport": {
+      "enum": ["stdio", "streamable_http", "sse"]
+    },
+    "commandOrUrl": {
+      "type": "string"
+    },
+    "args": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "authReferences": {
+      "type": "array",
+      "items": {
+        "$ref": "auth-reference.schema.json"
+      }
+    },
+    "clients": {
+      "type": "array",
+      "items": {
+        "$ref": "mcp-client-binding.schema.json"
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "trust": {
+      "enum": ["verified", "review_required", "blocked"]
+    },
+    "authState": {
+      "enum": ["none", "reference_configured", "reference_missing"]
+    },
+    "health": {
+      "enum": ["healthy", "degraded", "unreachable", "unknown"]
+    },
+    "lastChecked": {
+      "type": "string"
+    },
+    "state": {
+      "$ref": "inventory-contracts.schema.json#/$defs/inventoryState"
+    }
+  }
+}

@@ -1,0 +1,86 @@
+[
+  {
+    "receipt": {
+      "id": "receipt:tool:2481",
+      "operationId": "op-2481",
+      "status": "success",
+      "startedAt": "2026-08-20T08:42:00+07:00",
+      "completedAt": "2026-08-20T08:43:00+07:00",
+      "summary": "Updated through the authoritative manager",
+      "details": ["Updated through the authoritative manager"]
+    },
+    "resource": "Codex CLI",
+    "action": "Update",
+    "owner": "Homebrew"
+  },
+  {
+    "receipt": {
+      "id": "receipt:skill:2479",
+      "operationId": "op-2479",
+      "status": "partial",
+      "startedAt": "2026-08-20T08:17:00+07:00",
+      "completedAt": "2026-08-20T08:18:00+07:00",
+      "summary": "Claude Code complete, Codex target failed",
+      "details": ["Claude Code complete", "Codex target failed"]
+    },
+    "resource": "Browser Control",
+    "action": "Update skill",
+    "owner": "Trusted skill catalog"
+  },
+  {
+    "receipt": {
+      "id": "handoff:2472",
+      "operationId": "op-2472",
+      "status": "cancelled",
+      "startedAt": "2026-08-19T16:55:00+07:00",
+      "completedAt": "2026-08-19T16:56:00+07:00",
+      "summary": "User closed the vendor updater",
+      "details": ["User closed the vendor updater"]
+    },
+    "resource": "Docker Desktop",
+    "action": "Vendor handoff",
+    "owner": "Vendor updater"
+  },
+  {
+    "receipt": {
+      "id": "receipt:skill:2468",
+      "operationId": "op-2468",
+      "status": "recoverable",
+      "startedAt": "2026-08-19T15:08:00+07:00",
+      "completedAt": "2026-08-19T15:09:00+07:00",
+      "summary": "Local changes blocked replacement",
+      "details": ["Local changes blocked replacement"]
+    },
+    "resource": "Release Pilot",
+    "action": "Update skill",
+    "owner": "Trusted skill catalog"
+  },
+  {
+    "receipt": {
+      "id": "product-update:2455",
+      "operationId": "op-2455",
+      "status": "failed",
+      "startedAt": "2026-08-18T11:32:00+07:00",
+      "completedAt": "2026-08-18T11:33:00+07:00",
+      "summary": "Package verification passed, restart failed",
+      "details": ["Package verification passed", "Restart failed"]
+    },
+    "resource": "STM",
+    "action": "Product update",
+    "owner": "Signed product channel"
+  },
+  {
+    "receipt": {
+      "id": "scan:2441",
+      "operationId": "op-2441",
+      "status": "success",
+      "startedAt": "2026-08-18T09:04:00+07:00",
+      "completedAt": "2026-08-18T09:05:00+07:00",
+      "summary": "Read-only manager query completed",
+      "details": ["Read-only manager query completed"]
+    },
+    "resource": "Git",
+    "action": "Inventory refresh",
+    "owner": "Homebrew"
+  }
+]

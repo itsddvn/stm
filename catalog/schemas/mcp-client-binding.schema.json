@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/mcp-client-binding.schema.json",
+  "title": "STM MCP Client Binding",
+  "type": "object",
+  "required": ["client", "state", "scope"],
+  "properties": {
+    "client": {
+      "enum": ["Codex", "Claude Code", "Cursor"]
+    },
+    "state": {
+      "enum": ["enabled", "disabled", "unsupported"]
+    },
+    "scope": {
+      "enum": ["global"]
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/source-analysis.schema.json",
+  "title": "STM Source Analysis",
+  "type": "object",
+  "required": [
+    "kind",
+    "submittedUrl",
+    "status",
+    "detectedName",
+    "sourceHost",
+    "sourceType",
+    "publisher",
+    "target",
+    "trust",
+    "riskFlags",
+    "notes"
+  ],
+  "properties": {
+    "kind": {
+      "enum": ["tool", "skill", "mcp"]
+    },
+    "submittedUrl": {
+      "type": "string",
+      "format": "uri"
+    },
+    "normalizedUrl": {
+      "type": ["string", "null"],
+      "format": "uri"
+    },
+    "status": {
+      "enum": ["review_ready", "blocked"]
+    },
+    "detectedName": {
+      "type": "string"
+    },
+    "sourceHost": {
+      "type": "string"
+    },
+    "sourceType": {
+      "type": "string"
+    },
+    "publisher": {
+      "type": "string"
+    },
+    "target": {
+      "type": "string"
+    },
+    "trust": {
+      "enum": ["catalog_match", "review_required", "blocked"]
+    },
+    "riskFlags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

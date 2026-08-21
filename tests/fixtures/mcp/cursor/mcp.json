@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "GitHub": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "transport": "streamable_http",
+      "tokenAlias": "github-access-token",
+      "capabilities": ["tools", "prompts"]
+    },
+    "Broken Entry": {
+      "env": {
+        "TOKEN": "${TOKEN}"
+      }
+    }
+  }
+}

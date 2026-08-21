@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/skill-scan-report.schema.json",
+  "title": "STM Skill Scan Report",
+  "type": "object",
+  "required": ["roots", "skills", "warnings"],
+  "properties": {
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["client", "declaredRoot", "accepted"],
+        "properties": {
+          "client": {
+            "enum": ["Codex", "Claude Code", "AgentKit"]
+          },
+          "declaredRoot": { "type": "string" },
+          "canonicalRoot": {
+            "type": ["string", "null"]
+          },
+          "accepted": { "type": "boolean" },
+          "reason": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["client", "slug", "root", "manifestPath"],
+        "properties": {
+          "client": {
+            "enum": ["Codex", "Claude Code", "AgentKit"]
+          },
+          "slug": { "type": "string" },
+          "root": { "type": "string" },
+          "manifestPath": { "type": "string" },
+          "rejectedReason": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

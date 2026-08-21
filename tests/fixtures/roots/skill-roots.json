@@ -1,0 +1,5 @@
+[
+  { "client": "Codex", "root": "$HOME/.codex/skills" },
+  { "client": "Claude Code", "root": "$HOME/.claude/skills" },
+  { "client": "AgentKit", "root": "$HOME/.agents/skills" }
+]

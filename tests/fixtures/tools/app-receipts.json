@@ -1,0 +1,14 @@
+[
+  {
+    "toolId": "orca-ade",
+    "owner": "Vendor updater",
+    "version": "0.9.4",
+    "manager": "vendor"
+  },
+  {
+    "toolId": "docker-desktop",
+    "owner": "Vendor updater",
+    "version": "4.44.2",
+    "manager": "vendor"
+  }
+]

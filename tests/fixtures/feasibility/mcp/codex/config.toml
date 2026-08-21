@@ -1,0 +1,14 @@
+[mcp_servers.github]
+command = "npx"
+args = ["@modelcontextprotocol/server-github"]
+
+[mcp_servers.github_mirror]
+command = "npx"
+args = ["@modelcontextprotocol/server-github"]
+
+[mcp_servers.postgres]
+url = "https://mcp.example.com/postgres?access_token=secret"
+transport = "streamable_http"
+tokenAlias = "postgres-service-token"
+[mcp_servers.postgres.env]
+PG_SERVICE_TOKEN = "${PG_SERVICE_TOKEN}"

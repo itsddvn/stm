@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "GitHub": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-github"]
+    },
+    "Docs": {
+      "url": "https://mcp.example.com/docs?token=secret-fragment#ignored",
+      "transport": "sse",
+      "headers": {
+        "Authorization": "Bearer ${DOCS_API_TOKEN}"
+      },
+      "env": {
+        "DOCS_API_TOKEN": "${DOCS_API_TOKEN}"
+      }
+    }
+  }
+}

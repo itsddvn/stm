@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/tool-record.schema.json",
+  "title": "STM Tool Record",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "summary",
+    "kind",
+    "groups",
+    "recommended",
+    "catalogStatus",
+    "mappingStatus",
+    "state",
+    "owner",
+    "ownershipKind",
+    "executionMode",
+    "manager",
+    "packageId",
+    "platform",
+    "privilege",
+    "lifecycleConfidence"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "summary": { "type": "string" },
+    "kind": { "type": "string" },
+    "groups": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recommended": { "type": "boolean" },
+    "catalogStatus": {
+      "$ref": "inventory-contracts.schema.json#/$defs/catalogStatus"
+    },
+    "mappingStatus": {
+      "$ref": "inventory-contracts.schema.json#/$defs/mappingStatus"
+    },
+    "state": {
+      "$ref": "inventory-contracts.schema.json#/$defs/inventoryState"
+    },
+    "owner": { "type": "string" },
+    "ownershipKind": {
+      "$ref": "inventory-contracts.schema.json#/$defs/ownershipKind"
+    },
+    "executionMode": {
+      "$ref": "inventory-contracts.schema.json#/$defs/executionMode"
+    },
+    "installedVersion": {
+      "type": ["string", "null"]
+    },
+    "availableVersion": {
+      "type": ["string", "null"]
+    },
+    "manager": { "type": "string" },
+    "packageId": { "type": "string" },
+    "platform": { "type": "string" },
+    "privilege": {
+      "$ref": "inventory-contracts.schema.json#/$defs/privilegeRequirement"
+    },
+    "lifecycleConfidence": { "type": "string" },
+    "reasonCode": {
+      "type": ["string", "null"]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "Filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/itsddvn/projects/tools-managers"],
+      "capabilities": ["resources", "tools"]
+    },
+    "Sentry": {
+      "url": "https://mcp.sentry.dev/sse?token=secret-fragment#ignored",
+      "transport": "sse",
+      "authRequired": true,
+      "capabilities": ["tools"]
+    }
+  }
+}

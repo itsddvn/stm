@@ -1,0 +1,92 @@
+[
+  {
+    "toolId": "git",
+    "authority": "manager",
+    "currentVersion": "2.51.0",
+    "targetVersion": "2.51.0",
+    "updateAvailable": false,
+    "freshness": "fresh",
+    "sourceAuthority": "manager"
+  },
+  {
+    "toolId": "orca-ade",
+    "authority": "vendor",
+    "currentVersion": "0.9.4",
+    "targetVersion": "0.10.1",
+    "updateAvailable": true,
+    "freshness": "fresh",
+    "sourceAuthority": "vendor"
+  },
+  {
+    "toolId": "cmux-desktop",
+    "authority": "manager",
+    "currentVersion": "1.8.2",
+    "targetVersion": "1.8.2",
+    "updateAvailable": false,
+    "freshness": "fresh",
+    "sourceAuthority": "manager"
+  },
+  {
+    "toolId": "docker-desktop",
+    "authority": "vendor",
+    "currentVersion": "4.44.2",
+    "targetVersion": "4.45.0",
+    "updateAvailable": true,
+    "freshness": "fresh",
+    "sourceAuthority": "vendor"
+  },
+  {
+    "toolId": "orbstack",
+    "authority": "manager",
+    "currentVersion": "2.2.1",
+    "targetVersion": "2.2.1",
+    "updateAvailable": false,
+    "freshness": "fresh",
+    "sourceAuthority": "manager"
+  },
+  {
+    "toolId": "agentkit-cli",
+    "authority": "manager",
+    "currentVersion": "0.18.3",
+    "targetVersion": "0.18.3",
+    "updateAvailable": false,
+    "freshness": "fresh",
+    "sourceAuthority": "manager"
+  },
+  {
+    "toolId": "oh-my-pi",
+    "authority": "none",
+    "currentVersion": "0.7.8",
+    "targetVersion": "0.7.8",
+    "updateAvailable": false,
+    "freshness": "fresh",
+    "sourceAuthority": "none"
+  },
+  {
+    "toolId": "codex-cli",
+    "authority": "manager",
+    "currentVersion": "0.31.0",
+    "targetVersion": "0.32.1",
+    "updateAvailable": true,
+    "freshness": "fresh",
+    "sourceAuthority": "manager"
+  },
+  {
+    "toolId": "grok-build",
+    "authority": "pinned_git",
+    "currentVersion": "0.4.2",
+    "targetVersion": "0.5.0",
+    "updateAvailable": true,
+    "freshness": "fresh",
+    "sourceAuthority": "pinned_git"
+  },
+  {
+    "toolId": "cloudflared",
+    "authority": "manager",
+    "currentVersion": "2026.7.0",
+    "targetVersion": "2026.8.1",
+    "updateAvailable": true,
+    "freshness": "fresh",
+    "sourceAuthority": "manager"
+  }
+]

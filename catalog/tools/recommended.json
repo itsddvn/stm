@@ -1,0 +1,329 @@
+{
+  "version": "2026-08-21",
+  "tools": [
+    {
+      "id": "git",
+      "name": "Git",
+      "summary": "Distributed source control.",
+      "kind": "cli_tool",
+      "groups": ["source_control"],
+      "tags": ["distributed_vcs"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "GPL-2.0-only",
+      "homepage": "https://git-scm.com/",
+      "sourceUrl": "https://github.com/git/git",
+      "aliases": ["git", "git-scm"],
+      "probeKey": "git",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "homebrew",
+          "packageId": "git",
+          "adapter": "homebrew_formula",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "none",
+          "updateAuthority": "manager"
+        },
+        {
+          "platform": "windows_x64",
+          "manager": "winget",
+          "packageId": "Git.Git",
+          "adapter": "winget_package",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "none",
+          "updateAuthority": "manager"
+        },
+        {
+          "platform": "linux_x64",
+          "manager": "apt",
+          "packageId": "git",
+          "adapter": "apt_package",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "required",
+          "updateAuthority": "manager"
+        },
+        {
+          "platform": "linux_x64",
+          "manager": "dnf",
+          "packageId": "git",
+          "adapter": "dnf_package",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "required",
+          "updateAuthority": "manager"
+        },
+        {
+          "platform": "linux_x64",
+          "manager": "pacman",
+          "packageId": "git",
+          "adapter": "pacman_package",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "required",
+          "updateAuthority": "manager"
+        }
+      ]
+    },
+    {
+      "id": "orca-ade",
+      "name": "Orca",
+      "summary": "Agentic development environment.",
+      "kind": "desktop_app",
+      "groups": ["source_control", "editors_ides", "terminal_shell", "ai_coding_agents"],
+      "tags": ["desktop"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Proprietary",
+      "homepage": "https://www.orca.so/",
+      "sourceUrl": "https://www.orca.so/",
+      "aliases": ["orca", "orca-ade"],
+      "probeKey": "orca",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "vendor",
+          "packageId": "com.orca.ade",
+          "adapter": "vendor_receipt",
+          "mappingStatus": "supported",
+          "executionMode": "vendor_handoff",
+          "ownershipKind": "vendor_owned",
+          "privilege": "none",
+          "updateAuthority": "vendor"
+        }
+      ]
+    },
+    {
+      "id": "cmux-desktop",
+      "name": "cmux desktop",
+      "summary": "Terminal workspace for agent workflows.",
+      "kind": "desktop_app",
+      "groups": ["terminal_shell", "ai_coding_agents"],
+      "tags": ["desktop"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Proprietary",
+      "homepage": "https://cmux.ai/",
+      "sourceUrl": "https://cmux.ai/",
+      "aliases": ["cmux", "cmux-desktop"],
+      "probeKey": "cmux",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "homebrew",
+          "packageId": "cmux",
+          "adapter": "homebrew_cask",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "none",
+          "updateAuthority": "manager"
+        }
+      ]
+    },
+    {
+      "id": "docker-desktop",
+      "name": "Docker Desktop",
+      "summary": "Container development environment.",
+      "kind": "desktop_app",
+      "groups": ["containers_kubernetes", "cloud_devops"],
+      "tags": ["containers"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Proprietary",
+      "homepage": "https://www.docker.com/products/docker-desktop/",
+      "sourceUrl": "https://www.docker.com/products/docker-desktop/",
+      "aliases": ["docker-desktop"],
+      "probeKey": "docker_desktop",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "vendor",
+          "packageId": "com.docker.docker",
+          "adapter": "vendor_receipt",
+          "mappingStatus": "supported",
+          "executionMode": "vendor_handoff",
+          "ownershipKind": "vendor_owned",
+          "privilege": "required",
+          "updateAuthority": "vendor"
+        }
+      ]
+    },
+    {
+      "id": "orbstack",
+      "name": "OrbStack",
+      "summary": "Fast local containers and Linux machines.",
+      "kind": "desktop_app",
+      "groups": ["containers_kubernetes", "cloud_devops"],
+      "tags": ["containers"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Proprietary",
+      "homepage": "https://orbstack.dev/",
+      "sourceUrl": "https://orbstack.dev/",
+      "aliases": ["orbstack"],
+      "probeKey": "orbstack",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "homebrew",
+          "packageId": "orbstack",
+          "adapter": "homebrew_cask",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "none",
+          "updateAuthority": "manager"
+        }
+      ]
+    },
+    {
+      "id": "agentkit-cli",
+      "name": "AgentKit CLI",
+      "summary": "Agent workflow toolkit.",
+      "kind": "cli_tool",
+      "groups": ["ai_coding_agents", "package_version_management"],
+      "tags": ["agentkit"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Proprietary",
+      "homepage": "https://agentkit.best/",
+      "sourceUrl": "https://docs.agentkit.best/",
+      "aliases": ["ak", "agentkit"],
+      "probeKey": "agentkit",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "homebrew",
+          "packageId": "agentkit",
+          "adapter": "homebrew_formula",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "none",
+          "updateAuthority": "manager"
+        }
+      ]
+    },
+    {
+      "id": "oh-my-pi",
+      "name": "Oh My Pi",
+      "summary": "Terminal-first coding agent.",
+      "kind": "cli_tool",
+      "groups": ["ai_coding_agents"],
+      "tags": ["agent"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Proprietary",
+      "homepage": "https://ohmypi.dev/",
+      "sourceUrl": "https://ohmypi.dev/",
+      "aliases": ["omp", "oh-my-pi"],
+      "probeKey": "oh_my_pi",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "external",
+          "packageId": "omp",
+          "adapter": "external_probe",
+          "mappingStatus": "detect_only",
+          "executionMode": "detect_only",
+          "ownershipKind": "external",
+          "privilege": "unknown",
+          "updateAuthority": "none"
+        }
+      ]
+    },
+    {
+      "id": "codex-cli",
+      "name": "Codex CLI",
+      "summary": "OpenAI coding agent.",
+      "kind": "cli_tool",
+      "groups": ["ai_coding_agents"],
+      "tags": ["openai"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Apache-2.0",
+      "homepage": "https://developers.openai.com/codex/cli/",
+      "sourceUrl": "https://github.com/openai/codex",
+      "aliases": ["codex", "codex-cli"],
+      "probeKey": "codex",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "npm",
+          "packageId": "@openai/codex",
+          "adapter": "npm_package",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "none",
+          "updateAuthority": "manager"
+        }
+      ]
+    },
+    {
+      "id": "grok-build",
+      "name": "Grok Build",
+      "summary": "AI coding CLI.",
+      "kind": "cli_tool",
+      "groups": ["ai_coding_agents"],
+      "tags": ["agent"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Proprietary",
+      "homepage": "https://grok.com/",
+      "sourceUrl": "https://grok.com/",
+      "aliases": ["grok", "grok-build"],
+      "probeKey": "grok",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "vendor",
+          "packageId": "grok",
+          "adapter": "external_probe",
+          "mappingStatus": "detect_only",
+          "executionMode": "detect_only",
+          "ownershipKind": "vendor_owned",
+          "privilege": "unknown",
+          "updateAuthority": "pinned_git"
+        }
+      ]
+    },
+    {
+      "id": "cloudflared",
+      "name": "cloudflared",
+      "summary": "Cloudflare Tunnel connector.",
+      "kind": "service_daemon",
+      "groups": ["api_networking", "cloud_devops", "security_quality"],
+      "tags": ["cloudflare"],
+      "recommended": true,
+      "catalogStatus": "locked",
+      "license": "Apache-2.0",
+      "homepage": "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/",
+      "sourceUrl": "https://github.com/cloudflare/cloudflared",
+      "aliases": ["cloudflared"],
+      "probeKey": "cloudflared",
+      "mappings": [
+        {
+          "platform": "macos_arm64",
+          "manager": "homebrew",
+          "packageId": "cloudflared",
+          "adapter": "homebrew_formula",
+          "mappingStatus": "supported",
+          "executionMode": "managed_execute",
+          "ownershipKind": "manager_owned",
+          "privilege": "none",
+          "updateAuthority": "manager"
+        }
+      ]
+    }
+  ]
+}

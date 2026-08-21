@@ -1,0 +1,29 @@
+[[permission]]
+identifier = "phase-three-read"
+description = "Read-only Phase 3 commands for snapshot, status, detail, updates, history, diagnostics, and source analysis."
+commands.allow = [
+  "refresh_snapshot",
+  "refresh_status",
+  "headless_scan",
+  "list_tools",
+  "get_tool_detail",
+  "list_skills",
+  "get_skill_detail",
+  "list_mcp_servers",
+  "get_mcp_detail",
+  "list_updates",
+  "list_operations",
+  "analyze_source",
+  "run_diagnostics"
+]
+
+[[permission]]
+identifier = "phase-five-tool-lifecycle"
+description = "Consent-bound tool lifecycle planning, execution, status, and cancellation commands."
+commands.allow = [
+  "prepare_lifecycle_plan",
+  "start_lifecycle_operation",
+  "lifecycle_operation_status",
+  "cancel_lifecycle_operation",
+  "cancel_operation"
+]

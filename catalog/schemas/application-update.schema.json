@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/application-update.schema.json",
+  "title": "STM Application Update Record",
+  "type": "object",
+  "required": [
+    "id",
+    "resourceType",
+    "name",
+    "current",
+    "target",
+    "executionMode",
+    "selected",
+    "risk"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "resourceType": {
+      "enum": ["tool", "skill", "product"]
+    },
+    "name": { "type": "string" },
+    "current": { "type": "string" },
+    "target": { "type": "string" },
+    "executionMode": {
+      "enum": ["managed_execute", "vendor_handoff", "detect_only", "signed_product_update"]
+    },
+    "selected": { "type": "boolean" },
+    "risk": { "type": "string" }
+  }
+}

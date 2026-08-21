@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/operation-plan.schema.json",
+  "title": "STM Operation Plan",
+  "type": "object",
+  "required": [
+    "id",
+    "resourceType",
+    "resourceId",
+    "action",
+    "executionMode",
+    "ownershipKind",
+    "requiresConsent",
+    "warnings",
+    "steps"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "resourceType": { "enum": ["tool", "skill", "mcp", "product"] },
+    "resourceId": { "type": "string" },
+    "action": { "type": "string" },
+    "executionMode": {
+      "enum": ["managed_execute", "vendor_handoff", "detect_only"]
+    },
+    "ownershipKind": {
+      "enum": ["manager_owned", "vendor_owned", "system_owned", "external", "unknown"]
+    },
+    "requiresConsent": { "type": "boolean" },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "detail"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "detail": { "type": "string" }
+        }
+      }
+    }
+  }
+}

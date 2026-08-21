@@ -1,0 +1,32 @@
+[
+  {
+    "skillId": "frontend-design",
+    "currentRevision": "7f84c21",
+    "targetRevision": "c9e9f31",
+    "updateAvailable": true
+  },
+  {
+    "skillId": "security-scan",
+    "currentRevision": "9a12be0",
+    "targetRevision": "9a12be0",
+    "updateAvailable": false
+  },
+  {
+    "skillId": "release-pilot",
+    "currentRevision": "d24b80c + local",
+    "targetRevision": "f91a6bc",
+    "updateAvailable": true
+  },
+  {
+    "skillId": "browser-control",
+    "currentRevision": "128ab6f",
+    "targetRevision": "128ab6f",
+    "updateAvailable": false
+  },
+  {
+    "skillId": "database-operations",
+    "currentRevision": "missing",
+    "targetRevision": "2e44a9c",
+    "updateAvailable": false
+  }
+]

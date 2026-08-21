@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/tool-catalog.schema.json",
+  "title": "STM Tool Catalog",
+  "type": "object",
+  "required": ["version", "tools"],
+  "properties": {
+    "version": { "type": "string" },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "summary",
+          "kind",
+          "groups",
+          "tags",
+          "recommended",
+          "catalogStatus",
+          "license",
+          "homepage",
+          "sourceUrl",
+          "aliases",
+          "probeKey",
+          "mappings"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "summary": { "type": "string" },
+          "kind": { "type": "string" },
+          "groups": { "type": "array", "items": { "type": "string" } },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "recommended": { "type": "boolean" },
+          "catalogStatus": { "$ref": "inventory-contracts.schema.json#/$defs/catalogStatus" },
+          "license": { "type": "string" },
+          "homepage": { "type": "string", "format": "uri" },
+          "sourceUrl": { "type": "string", "format": "uri" },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "probeKey": { "type": "string" },
+          "mappings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "platform",
+                "manager",
+                "packageId",
+                "adapter",
+                "mappingStatus",
+                "executionMode",
+                "ownershipKind",
+                "privilege",
+                "updateAuthority"
+              ],
+              "properties": {
+                "platform": { "type": "string" },
+                "manager": { "type": "string" },
+                "packageId": { "type": "string" },
+                "adapter": { "type": "string" },
+                "mappingStatus": { "$ref": "inventory-contracts.schema.json#/$defs/mappingStatus" },
+                "executionMode": { "$ref": "inventory-contracts.schema.json#/$defs/executionMode" },
+                "ownershipKind": { "$ref": "inventory-contracts.schema.json#/$defs/ownershipKind" },
+                "privilege": { "$ref": "inventory-contracts.schema.json#/$defs/privilegeRequirement" },
+                "updateAuthority": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

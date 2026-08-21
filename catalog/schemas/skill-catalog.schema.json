@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/skill-catalog.schema.json",
+  "title": "STM Skill Catalog Receipt",
+  "type": "object",
+  "required": ["id", "name", "description", "source", "revision", "digest", "purposes", "targets"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "source": { "type": "string" },
+    "revision": { "type": "string" },
+    "digest": { "type": "string" },
+    "purposes": { "type": "array", "items": { "type": "string" } },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["client", "relativePath"],
+        "properties": {
+          "client": { "enum": ["Codex", "Claude Code", "AgentKit"] },
+          "relativePath": { "type": "string" }
+        }
+      }
+    }
+  }
+}

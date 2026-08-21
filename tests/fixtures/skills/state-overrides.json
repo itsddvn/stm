@@ -1,0 +1,72 @@
+{
+  "frontend-design": {
+    "state": "managed_update_available",
+    "riskFlags": ["Contains scripts"],
+    "diff": [
+      {
+        "file": "SKILL.md",
+        "change": "modified",
+        "summary": "Clarifies accessibility review gate"
+      },
+      {
+        "file": "references/tokens.md",
+        "change": "added",
+        "summary": "Adds token contract guidance"
+      }
+    ]
+  },
+  "release-pilot": {
+    "state": "modified",
+    "targetStates": {
+      "Claude Code": "modified",
+      "AgentKit": "current"
+    },
+    "riskFlags": ["Local modification", "Contains scripts"],
+    "diff": [
+      {
+        "file": "SKILL.md",
+        "change": "modified",
+        "summary": "Local instruction differs from receipt"
+      },
+      {
+        "file": "scripts/release.sh",
+        "change": "modified",
+        "summary": "Upstream validation logic changed"
+      }
+    ]
+  },
+  "browser-control": {
+    "state": "conflict",
+    "targetStates": {
+      "Codex": "failed",
+      "Claude Code": "current"
+    },
+    "riskFlags": ["Partial target failure", "Tool requirements"],
+    "diff": [
+      {
+        "file": "SKILL.md",
+        "change": "modified",
+        "summary": "Updates browser permission contract"
+      }
+    ]
+  },
+  "database-operations": {
+    "state": "missing",
+    "targetStates": {
+      "Codex": "missing"
+    },
+    "riskFlags": ["Contains scripts", "Tool requirements"],
+    "diff": [
+      {
+        "file": "SKILL.md",
+        "change": "added",
+        "summary": "Defines bounded database operations"
+      },
+      {
+        "file": "scripts/inspect-schema.ts",
+        "change": "added",
+        "summary": "Read-only schema inspection helper"
+      }
+    ]
+  }
+}

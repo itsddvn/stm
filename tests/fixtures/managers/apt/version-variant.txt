@@ -1,0 +1,2 @@
+curl	8.5.0-2ubuntu10.6
+git	1:2.43.0-1ubuntu7.2+esm1

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/inventory-contracts.schema.json",
+  "title": "STM Inventory Contracts",
+  "$defs": {
+    "catalogStatus": {
+      "enum": ["candidate", "locked", "review_required", "unsupported"]
+    },
+    "mappingStatus": {
+      "enum": ["supported", "detect_only", "blocked", "unsupported"]
+    },
+    "executionMode": {
+      "enum": ["managed_execute", "vendor_handoff", "detect_only"]
+    },
+    "ownershipKind": {
+      "enum": ["manager_owned", "vendor_owned", "system_owned", "external", "unknown"]
+    },
+    "inventoryState": {
+      "enum": [
+        "managed_current",
+        "managed_update_available",
+        "blocked",
+        "external",
+        "modified",
+        "missing",
+        "unsupported",
+        "manager_unavailable",
+        "source_unavailable",
+        "invalid",
+        "conflict",
+        "unknown"
+      ]
+    },
+    "loadState": {
+      "enum": ["ready", "empty", "loading", "partial", "error"]
+    },
+    "freshness": {
+      "enum": ["fresh", "stale", "unknown"]
+    },
+    "privilegeRequirement": {
+      "enum": ["none", "required", "unknown"]
+    },
+    "surfaceStateContract": {
+      "type": "object",
+      "required": ["loadState", "freshness"],
+      "properties": {
+        "loadState": {
+          "$ref": "#/$defs/loadState"
+        },
+        "reasonCode": {
+          "type": ["string", "null"]
+        },
+        "freshness": {
+          "$ref": "#/$defs/freshness"
+        }
+      }
+    }
+  }
+}

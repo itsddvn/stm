@@ -1,28 +1,29 @@
-# Tools Manager — Market Scan and MVP Direction
+# STM (Smart Tools Management) — Market Scan and MVP Direction
 
-**Version:** 0.4.0  
-**Date:** 2026-08-20  
-**Status:** Review  
-**Source:** Original market scan plus product decisions confirmed on 2026-08-20  
-**Owner:** Project lead  
+**Version:** 0.5.0<br>
+**Date:** 2026-08-20<br>
+**Status:** Final<br>
+**Source:** Original market scan plus product decisions confirmed on 2026-08-20<br>
+**Owner:** Project lead<br>
 **License target:** MIT
 
 ---
 
-This report defines the product boundary and build direction for an independent, local-first desktop application with two product areas: developer tools and AI Agent Skills. It retains the market evidence behind the decision, then turns that evidence into a taxonomy, lifecycle model, architecture, and staged MVP.
+This report defines the product boundary and build direction for STM, an independent, local-first desktop application with three product areas: developer tools, global AI Agent Skills, and MCP servers. It retains the market evidence behind the decision, then turns that evidence into a taxonomy, lifecycle model, architecture, and staged MVP.
 
-**How to read:** product decisions are in §1–2; classification is in §5–6; Tools Manager and Skills Manager behavior is in §7–8; implementation detail is in §9–12.
+**How to read:** product decisions are in §1–2; classification is in §5–6; tool and skill behavior is in §7–8; MCP lifecycle detail is in the implementation plan; implementation detail is in §9–12.
 
 ## 1. Executive decision
 
 Build an independent desktop application. Do not fork UniGetUI and do not create a new package ecosystem.
 
-`tools-manager` is a developer discovery, inventory, ownership, trust, and update-planning layer over existing package managers. It owns the normalized catalog and user experience; WinGet, Homebrew, APT/dpkg, DNF/RPM, and Pacman retain normal package lifecycle ownership.
+STM is a developer discovery, inventory, ownership, trust, and update-planning layer over existing package managers and supported AI clients. It owns the normalized catalog and user experience; WinGet, Homebrew, APT/dpkg, DNF/RPM, Pacman, and configured MCP clients retain their normal lifecycle and configuration ownership.
 
-The product has two first-class areas:
+The product has three first-class areas:
 
-1. **Tools Manager** — discovers and classifies developer tools, then detects, hands off, or executes lifecycle operations according to the verified platform mapping and authoritative owner.
-2. **Skills Manager** — discovers global AI Agent Skills for Codex, Claude Code, and AgentKit-compatible installations, then checks and updates only skills with trusted catalog provenance and an app receipt.
+1. **Tools** — discovers and classifies developer tools, then detects, hands off, or executes lifecycle operations according to the verified platform mapping and authoritative owner.
+2. **Skills** — discovers global AI Agent Skills for Codex, Claude Code, and AgentKit-compatible installations, then checks and updates only skills with trusted catalog provenance and an app receipt.
+3. **MCP Servers** — inventories configured servers across supported clients, reviews endpoint/configuration changes, and preserves credential references without storing secret values.
 
 The desktop UI is the primary product surface. A reusable Rust core isolates domain logic and adapters so a diagnostic or automation CLI can be added later without coupling lifecycle rules to React.
 
@@ -47,14 +48,14 @@ The desktop UI is the primary product surface. A reusable Rust core isolates dom
 
 ### 2.1 Outcome
 
-A local desktop application helps developers discover, inspect, install, update, and uninstall development tools and manage global AI Agent Skills on Windows, macOS, and Linux without memorizing platform-specific commands or manually comparing skill directories.
+A local STM desktop application helps developers discover, inspect, install, update, and uninstall development tools; manage global AI Agent Skills; and review configured MCP servers on Windows, macOS, and Linux without memorizing platform-specific commands or manually comparing skill and client configuration directories.
 
 ### 2.2 Confirmed product decisions
 
 - Build a new application rather than fork UniGetUI.
 - Use a desktop app as the primary UX.
 - Target individual developers in the MVP; defer team onboarding workflows.
-- Separate Tools Manager and Skills Manager in the UI while sharing catalog, inventory, trust, receipt, and update-planning services.
+- Separate Tools, Skills, and MCP Servers in the UI while sharing catalog, inventory, trust, receipt, and update-planning services.
 - Allow each tool to belong to one or more functional groups; keep `recommended` as an independent catalog flag.
 - Use the user-confirmed initial Recommended set in §6; keep every other listed tool as Candidate.
 - Automatically discover installed versions and available updates.
@@ -63,6 +64,9 @@ A local desktop application helps developers discover, inspect, install, update,
 - Scan only global skill locations for Codex, Claude Code, and AgentKit-compatible toolkits.
 - Do not scan repositories or project-local skill directories.
 - Update only catalog-trusted skills whose provenance is recorded in a Git receipt.
+- Accept pasted HTTPS tool and skill source URLs only as untrusted review input; resolve them to an approved catalog/owner plan before any installation can be previewed.
+- Make MCP Servers a persistent primary navigation surface with inventory, client bindings, transport, capabilities, trust, auth-reference, health, add/configuration review, consent, denial, result, and removal states.
+- Store MCP credential references only; raw secrets remain in environment or OS credential facilities.
 
 ### 2.3 Constraints
 
@@ -78,6 +82,8 @@ A local desktop application helps developers discover, inspect, install, update,
 - Treat a detected asset as unmanaged until an authoritative owner or app receipt is known.
 - Never execute scripts bundled with a skill during scan, install, validation, or update.
 - Do not follow symlinks outside an approved skill root.
+- Never treat a pasted source URL as executable content, proof of ownership, or authorization to mutate tool, skill, or MCP configuration.
+- Never persist raw MCP credentials in inventory, receipts, history, diagnostics, logs, or exported data.
 
 ### 2.4 Non-goals for MVP
 
@@ -111,12 +117,14 @@ A local desktop application helps developers discover, inspect, install, update,
 - Lifecycle controls are enabled only when the selected platform mapping, detected owner, lifecycle status, and execution mode authorize the operation.
 - Global skill adapters canonicalize and deduplicate physical roots before scanning while preserving every logical client binding.
 - Product self-update uses a separate authenticated, signed application-update channel and never reuses tool adapters or tool receipts.
+- Source-URL intake rejects non-HTTPS, credential-bearing, or query-parameter URLs; rejected inputs are redacted before fixture state, and accepted sources require deterministic analysis plus fresh consent before a presentation or operation preview.
+- MCP inventory preserves per-client bindings and represents transport, capabilities, trust, auth-reference, health, enabled/disabled, unsupported-client, and blocked states without exposing secret values.
 
 ## 3. Market boundary
 
 The general package-manager GUI already exists. Devolutions UniGetUI provides a cross-platform desktop GUI for searching, installing, updating, and uninstalling packages through native and ecosystem package managers. Rebuilding that product without a narrower information boundary would duplicate a mature MIT project.
 
-The viable product boundary is the normalized developer catalog, role-based discovery, multi-platform visibility, ownership model, trust metadata, AI Agent Skill lifecycle, and consent-first update plan.
+The viable product boundary is the normalized developer catalog, role-based discovery, multi-platform visibility, ownership model, trust metadata, AI Agent Skill lifecycle, MCP configuration inventory, reviewed source intake, and consent-first operation planning.
 
 ### 3.1 Closest products
 
@@ -576,62 +584,72 @@ Skill detail shows catalog source, repository/subpath, commit/tag, optional decl
 
 ## 11. Delivery plan
 
-### 11.1 Phase 0 — Foundation contracts and platform feasibility
+### 11.1 Phase 0 — Mobbin-guided interface prototype and UI contract lock
 
-- Confirm supported OS/architecture matrix and GUI runtime prerequisites.
+- Use Mobbin MCP screen and flow searches as reference research; record canonical links and adaptation notes without copying proprietary imagery or branding.
+- Build the complete fixture-backed React interface for Dashboard, Tools, Skills, Updates, Operation History, and Settings before backend logic.
+- Cover read-only states plus future plan/consent/handoff/progress/result, skill conflict/rollback, diagnostics, and product-update flows.
+- Verify the running interface across the approved desktop viewport matrix, accessibility behaviors, and critical screenshots.
+- Obtain project-lead approval, then freeze routes, view states, actions, copy, tokens, interactions, fixtures, responsive rules, accessibility behavior, and visual baselines as UI Contract v1.
+
+**Exit:** UI Contract v1 is approved and locked. Every later phase is blocked until the lock passes; intentional UI change requires reopen, re-verification, approval, version bump, and cross-phase propagation.
+
+### 11.2 Phase 1 — Foundation contracts and platform feasibility
+
+- Add Tauri and the reusable Rust core behind the approved interface without visual or interaction drift.
 - Spike read-only inventory for WinGet, Homebrew, one Linux manager, and the three global skill adapters.
-- Prove Tauri-to-Rust command/event boundary, process supervision, canonical skill-root handling, and platform-native per-operation elevation feasibility.
-- Define catalog, mapping, receipt, normalized state, execution-mode, application-update, and adapter contracts.
+- Prove Tauri-to-Rust command/event boundary, process supervision, canonical skill-root handling, SQLite persistence, and platform-native per-operation elevation feasibility.
+- Define catalog, mapping, receipt, normalized state, execution-mode, application-update, adapter, and application DTO contracts against UI Contract v1.
 
-**Exit:** fixture-based scans produce stable canonical states without elevation or project traversal.
+**Exit:** fixture-based manager and skill-client scans produce stable canonical states without elevation or project traversal; the Tauri development shell preserves UI Contract v1.
 
-### 11.2 Phase 1 — Read-only core
+### 11.3 Phase 2 — Read-only core
 
 - Implement catalog validation and seed the ten-tool Recommended set with mapping-level platform gates.
 - Implement manager inventory, allowlisted detectors, global skill discovery, physical-root deduplication, and canonical reconciliation.
 - Implement SQLite cache, receipts, scan diagnostics, state reconciliation, version/revision resolution, and update detection without mutations.
-- Build fixture and contract suites before UI integration.
+- Build fixture and consumer-contract suites for every approved UI read state before desktop integration.
 
-**Exit:** representative fixtures and live smoke tests classify catalog, mapping, ownership, tool inventory, and global skill states without UI or elevation.
+**Exit:** representative fixtures and live smoke tests classify catalog, mapping, ownership, tool inventory, and global skill states without UI logic or elevation.
 
-### 11.3 Phase 2 — Desktop read-only vertical slice
+### 11.4 Phase 3 — Desktop read-only integration
 
-- Build Dashboard, Tools, Skills, Updates, and required detail views over stable Rust application-service commands/events.
-- Show all ten Recommended tools with per-machine support, ownership, execution mode, installed/available version, and lifecycle confidence.
-- Show canonical global skills with deduplicated physical installs and logical Codex, Claude Code, and AgentKit-compatible bindings.
-- Implement refresh, progress, cancellation, diagnostics, empty states, unsupported states, and accessibility baseline without mutations.
+- Replace the approved interface's fixture IPC adapter with real Tauri commands/events.
+- Bind Dashboard, Tools, Skills, Updates, Operation History, and Settings to Rust application-service outputs without redesign.
+- Implement refresh, progress, cancellation, diagnostics, retry, and last-good-state integration.
+- Keep mutation controls disabled and verify interaction, accessibility, visual baseline, and packaged desktop behavior.
 
-**Exit:** a packaged development build demonstrates end-to-end read-only scan, reconciliation, filtering, details, and update visibility on representative fixtures and one live platform.
+**Exit:** a packaged development build demonstrates end-to-end read-only scan and update visibility through UI Contract v1 with no visual or interaction drift.
 
-### 11.4 Phase 3 — Safe tool lifecycle
+### 11.5 Phase 4 — Safe tool lifecycle
 
-- Add immutable operation plans and consent tokens.
+- Add immutable operation plans and consent tokens that serialize to the approved lifecycle UI.
 - Implement WinGet and Homebrew `managed_execute` mappings first; add APT/dpkg, DNF/RPM, and Pacman sequentially behind the same contract.
 - Promote Recommended-tool mappings independently from detect-only to handoff-only or ready after their contract suite passes.
 - Implement vendor-updater handoff without claiming app-managed rollback.
 - Add platform-native per-operation privilege boundary, process cancellation, structured logs, owner revalidation, and stale-plan rejection.
 
-**Exit:** repeated install is a no-op; update/uninstall require a known owner; no scan elevates.
+**Exit:** repeated install is a no-op; update/uninstall require a known owner; no scan elevates; approved lifecycle UI states remain locked.
 
-### 11.5 Phase 4 — Trusted global skill lifecycle
+### 11.6 Phase 5 — Trusted global skill lifecycle
 
+- Reuse the implemented immutable planning/consent substrate for trusted skill operations.
 - Implement trusted catalog/Git resolver and staging validation.
 - Materialize receipt-backed copies to selected global clients.
-- Add digest-based modification detection, diff preview, atomic update, rollback, and multi-target results.
-- Add source-unavailable, name collision, invalid manifest, and partial-failure recovery UX.
+- Add digest-based modification detection, diff preview, atomic update, rollback, multi-target results, and approved recovery UI binding.
 
-**Exit:** managed skills update only after consent; external/modified skills are never overwritten.
+**Exit:** managed skills update only after consent; external/modified skills are never overwritten; approved skill lifecycle UI states remain locked.
 
-### 11.6 Phase 5 — Cross-platform release hardening
+### 11.7 Phase 6 — Cross-platform release hardening
 
 - Cross-platform packaging, signing/notarization, signed Tauri application updates, upgrade testing, and rollback.
 - Threat-model review, catalog supply-chain controls, privacy review, and dependency scanning.
 - Performance tests for large manager inventories and global skill collections.
-- Accessibility, recovery, and failure-message review.
+- Accessibility, cross-platform visual equivalence, recovery, and failure-message review against UI Contract v1.
 
-**Exit:** signed release candidates pass platform smoke tests and security acceptance criteria.
+**Exit:** signed release candidates pass platform smoke, UI-contract, and security acceptance criteria.
 
-### 11.7 Deferred after MVP
+### 11.8 Deferred after MVP
 
 - Deterministic developer bundles beyond basic filtering.
 - Analysis-only GitHub/tool URL normalization.
@@ -730,7 +748,7 @@ Skill detail shows catalog source, repository/subpath, commit/tag, optional decl
 |---|---|---|
 | Independent or UniGetUI fork | Independent application | User decision 2026-08-20 |
 | Desktop or CLI | Desktop primary; reusable core; CLI deferred | User decision 2026-08-20 |
-| Product areas | Tools Manager and Skills Manager | User decision 2026-08-20 |
+| Product areas | Tools, Skills, and MCP Servers | User decisions 2026-08-20 |
 | Update behavior | Auto-detect; explicit consent before mutation | User decision 2026-08-20 |
 | Skill type | AI Agent Skills with `SKILL.md` | User decision 2026-08-20 |
 | Skill scan scope | Global only; no project scan | User decision 2026-08-20 |
@@ -743,11 +761,16 @@ Skill detail shows catalog source, repository/subpath, commit/tag, optional decl
 | Non-recommended catalog entries | Retain as Candidate | User decision 2026-08-20 |
 | Recommendation versus readiness | Recommendation is canonical curation; lifecycle readiness is per platform/owner mapping | Review approved by user 2026-08-20 |
 | Tool update execution | Per mapping: managed execute, vendor handoff, or detect-only; direct vendor asset lifecycle deferred | Review approved by user 2026-08-20 |
+| Application identity | STM, expanded as Smart Tools Management | User decision 2026-08-20 |
+| Tool and skill source intake | Paste HTTPS URL; analyze first; require review and fresh consent; never execute repository text | User decision 2026-08-20 |
+| MCP management | Persistent primary surface for inventory and reviewed configuration lifecycle | User decision 2026-08-20 |
+| MCP credential policy | Store credential references only; never store secret values in STM | User decision 2026-08-20 |
 
 ## 16. Unresolved questions
 
-1. Choose the trusted skill catalog publisher/review workflow and authenticated catalog-update mechanism before Phase 4.
-2. Define supported OS versions and CPU architectures before release packaging begins.
+1. Choose the trusted skill catalog publisher/review workflow and authenticated catalog-update mechanism before managed skill lifecycle implementation (implementation plan Phase 6).
+2. Resolve supported MCP client configuration schemas, trust policy, and credential-reference mechanism during Phase 2 before MCP lifecycle implementation (implementation plan Phase 7).
+3. Define supported OS versions and CPU architectures during foundation feasibility before release packaging (implementation plan Phase 8).
 
 ---
 
@@ -763,3 +786,5 @@ Skill detail shows catalog source, repository/subpath, commit/tag, optional decl
 | 0.3.0 | 2026-08-20 | Codex | Define the ten-tool Recommended set, move all other tools to Candidate, verify ambiguous canonical identities, and add owner-aware implementation order. |
 | 0.3.1 | 2026-08-20 | Codex | Clarify that the Recommended AgentKit entry is AgentKit CLI (`ak`) from agentkit.best; exclude AgentKit Desktop App as a separate catalog tool. |
 | 0.4.0 | 2026-08-20 | Codex | Resolve review findings: split canonical and mapping readiness, define lifecycle execution modes, deduplicate skill roots, bound elevation, separate product self-update, and restructure delivery into vertical slices. |
+| 0.4.1 | 2026-08-20 | Codex | Make delivery UI-first: Mobbin reference research, complete fixture-backed interface, project-lead verification, UI Contract v1 lock, and dependent-phase change control before backend logic. |
+| 0.5.0 | 2026-08-20 | Codex | Rename the product to STM; add reviewed tool and skill HTTPS source intake; make MCP Servers a persistent primary management area; preserve client ownership and credential-reference boundaries. |

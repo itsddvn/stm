@@ -1,0 +1,76 @@
+import type { McpServerViewModel } from "../../contracts/ui/view-model-contract";
+import { withMcpPresentationActions } from "./presentation-action-fixtures";
+
+const mcpFixtureSeeds: Array<Omit<McpServerViewModel, "primaryAction" | "removeAction" | "toggleAction">> = [
+  {
+    id: "filesystem",
+    name: "Filesystem",
+    description: "Bounded access to approved local workspace roots.",
+    source: "modelcontextprotocol/servers",
+    transport: "stdio",
+    commandOrUrl: "npx -y @modelcontextprotocol/server-filesystem",
+    clients: [
+      { client: "Codex", state: "enabled", scope: "global" },
+      { client: "Claude Code", state: "enabled", scope: "global" },
+    ],
+    capabilities: ["resources", "tools"],
+    trust: "verified",
+    authState: "none",
+    health: "healthy",
+    lastChecked: "2 minutes ago",
+    state: "managed_current",
+  },
+  {
+    id: "github",
+    name: "GitHub",
+    description: "Repository, issue, and pull-request operations through a remote MCP endpoint.",
+    source: "github/github-mcp-server",
+    transport: "streamable_http",
+    commandOrUrl: "https://api.githubcopilot.com/mcp/",
+    clients: [
+      { client: "Codex", state: "enabled", scope: "global" },
+      { client: "Cursor", state: "enabled", scope: "global" },
+    ],
+    capabilities: ["tools", "prompts"],
+    trust: "verified",
+    authState: "reference_configured",
+    health: "healthy",
+    lastChecked: "5 minutes ago",
+    state: "managed_current",
+  },
+  {
+    id: "sentry",
+    name: "Sentry",
+    description: "Inspect errors, projects, and releases from a reviewed remote source.",
+    source: "sentry/mcp-server",
+    transport: "sse",
+    commandOrUrl: "https://mcp.sentry.dev/sse",
+    clients: [{ client: "Claude Code", state: "enabled", scope: "global" }],
+    capabilities: ["tools"],
+    trust: "review_required",
+    authState: "reference_configured",
+    health: "degraded",
+    lastChecked: "18 minutes ago",
+    state: "source_unavailable",
+  },
+  {
+    id: "postgres",
+    name: "PostgreSQL",
+    description: "Read-only database inspection for an approved local connection profile.",
+    source: "modelcontextprotocol/servers",
+    transport: "stdio",
+    commandOrUrl: "npx -y @modelcontextprotocol/server-postgres",
+    clients: [
+      { client: "Codex", state: "disabled", scope: "global" },
+      { client: "Cursor", state: "unsupported", scope: "global" },
+    ],
+    capabilities: ["resources", "tools"],
+    trust: "review_required",
+    authState: "reference_missing",
+    health: "unknown",
+    lastChecked: "Never",
+    state: "blocked",
+  },
+];
+
+export const mcpFixtures: McpServerViewModel[] = mcpFixtureSeeds.map(withMcpPresentationActions);

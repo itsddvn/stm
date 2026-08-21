@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/operation-receipt.schema.json",
+  "title": "STM Operation Receipt",
+  "type": "object",
+  "required": [
+    "id",
+    "operationId",
+    "status",
+    "startedAt",
+    "summary",
+    "details"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "operationId": { "type": "string" },
+    "status": {
+      "enum": ["success", "partial", "cancelled", "failed", "recoverable", "in_progress"]
+    },
+    "startedAt": { "type": "string" },
+    "completedAt": {
+      "type": ["string", "null"]
+    },
+    "summary": { "type": "string" },
+    "details": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "Postgres": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-postgres"]
+    }
+  }
+}

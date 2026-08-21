@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "GitHub": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-github"]
+    },
+    "Postgres": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-postgres"],
+      "disabled": true,
+      "authFile": "~/.cursor/mcp/postgres.env"
+    },
+    "Broken Entry": {
+      "env": {
+        "TOKEN": "${TOKEN}"
+      }
+    }
+  }
+}

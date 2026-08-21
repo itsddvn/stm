@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS scan_errors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope TEXT NOT NULL,
+  code TEXT NOT NULL,
+  detail TEXT NOT NULL
+);
+
+PRAGMA user_version = 2;

@@ -1,0 +1,391 @@
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+
+use crate::{
+    catalog::ToolCatalogMapping,
+    error::CoreError,
+    feasibility::process_supervisor::{
+        AllowedCommand, AllowlistedProcessSupervisor, ArgRule, CancelSignal, ExecutionRequest,
+        ExecutionStatus,
+    },
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagerStateEvidence {
+    pub installed: bool,
+    pub current_version: Option<String>,
+    pub target_version: String,
+    pub update_available: bool,
+    pub source: String,
+}
+
+pub trait ManagerEvidencePort: Send + Sync {
+    fn inspect(
+        &self,
+        mapping: &ToolCatalogMapping,
+        executable: &str,
+    ) -> Result<ManagerStateEvidence, CoreError>;
+}
+
+#[derive(Debug, Default)]
+pub struct RealManagerEvidence;
+
+impl ManagerEvidencePort for RealManagerEvidence {
+    fn inspect(
+        &self,
+        mapping: &ToolCatalogMapping,
+        executable: &str,
+    ) -> Result<ManagerStateEvidence, CoreError> {
+        match mapping.adapter.as_str() {
+            "homebrew_formula" | "homebrew_cask" => inspect_homebrew(mapping, executable),
+            "winget_package" => inspect_winget(mapping, executable),
+            "npm_package" => inspect_npm(mapping, executable),
+            "apt_package" | "dnf_package" | "pacman_package" => {
+                super::linux::inspect_linux_manager(mapping)
+            }
+            adapter => Err(CoreError::CommandDenied(format!(
+                "no live lifecycle evidence adapter for {adapter}"
+            ))),
+        }
+    }
+}
+
+pub fn real_manager_evidence() -> Arc<dyn ManagerEvidencePort> {
+    Arc::new(RealManagerEvidence)
+}
+
+fn inspect_homebrew(
+    mapping: &ToolCatalogMapping,
+    executable: &str,
+) -> Result<ManagerStateEvidence, CoreError> {
+    let mut args = vec!["info".to_string(), "--json=v2".to_string()];
+    if mapping.adapter == "homebrew_cask" {
+        args.push("--cask".to_string());
+    }
+    args.push(mapping.package_id.clone());
+    let output = read_only_command(executable, args, &[0])?;
+    let document: JsonValue = serde_json::from_str(&output)?;
+    let entry = if mapping.adapter == "homebrew_cask" {
+        document.get("casks")
+    } else {
+        document.get("formulae")
+    }
+    .and_then(JsonValue::as_array)
+    .and_then(|items| items.first())
+    .ok_or_else(|| {
+        CoreError::MalformedInput("Homebrew returned no matching package metadata".to_string())
+    })?;
+
+    let (current_version, target_version) = if mapping.adapter == "homebrew_cask" {
+        let current = entry
+            .get("installed")
+            .and_then(JsonValue::as_array)
+            .and_then(|items| items.last())
+            .and_then(JsonValue::as_str)
+            .map(str::to_string);
+        let target = entry
+            .get("version")
+            .and_then(JsonValue::as_str)
+            .ok_or_else(|| CoreError::MalformedInput("Homebrew cask version missing".to_string()))?
+            .to_string();
+        (current, target)
+    } else {
+        let current = entry
+            .get("installed")
+            .and_then(JsonValue::as_array)
+            .and_then(|items| items.last())
+            .and_then(|item| item.get("version"))
+            .and_then(JsonValue::as_str)
+            .map(str::to_string);
+        let target = entry
+            .get("versions")
+            .and_then(|versions| versions.get("stable"))
+            .and_then(JsonValue::as_str)
+            .ok_or_else(|| {
+                CoreError::MalformedInput("Homebrew formula version missing".to_string())
+            })?
+            .to_string();
+        (current, target)
+    };
+
+    let mut outdated_args = vec!["outdated".to_string(), "--json=v2".to_string()];
+    if mapping.adapter == "homebrew_cask" {
+        outdated_args.push("--cask".to_string());
+    }
+    outdated_args.push(mapping.package_id.clone());
+    let outdated = read_only_command(executable, outdated_args, &[0, 1])?;
+    let outdated: JsonValue = serde_json::from_str(&outdated)?;
+    let outdated_entry = homebrew_package_entry(&outdated, &mapping.package_id);
+    let target_version = outdated_entry
+        .and_then(|entry| entry.get("current_version"))
+        .and_then(JsonValue::as_str)
+        .map(str::to_string)
+        .unwrap_or(target_version);
+
+    Ok(ManagerStateEvidence {
+        installed: current_version.is_some(),
+        current_version,
+        target_version,
+        update_available: outdated_entry.is_some(),
+        source: "Live Homebrew JSON metadata".to_string(),
+    })
+}
+
+fn inspect_npm(
+    mapping: &ToolCatalogMapping,
+    executable: &str,
+) -> Result<ManagerStateEvidence, CoreError> {
+    super::command::validate_package_id(&mapping.adapter, &mapping.package_id)?;
+    let npm_executable = super::command::resolve_executable("npm")
+        .ok_or_else(|| CoreError::CommandDenied("reviewed npm executable not found".to_string()))?;
+    let invocation = super::command::resolve_npm_invocation(&npm_executable).ok_or_else(|| {
+        CoreError::CommandDenied("reviewed npm invocation is invalid".to_string())
+    })?;
+    if fs::canonicalize(Path::new(executable))? != invocation.executable {
+        return Err(CoreError::LifecycleEvidenceChanged(
+            "npm execution identity changed before evidence collection".to_string(),
+        ));
+    }
+    let mut installed_args = invocation.prefix_args.clone();
+    installed_args.extend([
+        "list".to_string(),
+        "--global".to_string(),
+        "--depth=0".to_string(),
+        "--json".to_string(),
+        mapping.package_id.clone(),
+    ]);
+    installed_args.extend(super::command::npm_source_args());
+    let installed_output = read_only_command(executable, installed_args, &[0, 1])?;
+    let installed: JsonValue = serde_json::from_str(&installed_output)?;
+    let current_version = installed
+        .get("dependencies")
+        .and_then(|dependencies| dependencies.get(&mapping.package_id))
+        .and_then(|package| package.get("version"))
+        .and_then(JsonValue::as_str)
+        .map(str::to_string);
+
+    let mut target_args = invocation.prefix_args;
+    target_args.extend([
+        "view".to_string(),
+        mapping.package_id.clone(),
+        "version".to_string(),
+        "--json".to_string(),
+    ]);
+    target_args.extend(super::command::npm_source_args());
+    let target_output = read_only_command(executable, target_args, &[0])?;
+    let target: JsonValue = serde_json::from_str(&target_output)?;
+    let target_version = target
+        .as_str()
+        .or_else(|| {
+            target
+                .as_array()
+                .and_then(|versions| versions.last())
+                .and_then(JsonValue::as_str)
+        })
+        .filter(|version| !version.is_empty())
+        .ok_or_else(|| CoreError::MalformedInput("npm registry version missing".to_string()))?
+        .to_string();
+
+    Ok(ManagerStateEvidence {
+        installed: current_version.is_some(),
+        update_available: current_version.as_deref() != Some(target_version.as_str()),
+        current_version,
+        target_version,
+        source: "Live npm global inventory and registry metadata from https://registry.npmjs.org/"
+            .to_string(),
+    })
+}
+
+fn inspect_winget(
+    mapping: &ToolCatalogMapping,
+    executable: &str,
+) -> Result<ManagerStateEvidence, CoreError> {
+    let export_directory = std::env::temp_dir().join(format!(
+        "stm-winget-evidence-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    fs::create_dir(&export_directory)?;
+    let export_path = export_directory.join("packages.json");
+    let export_path_argument = export_path
+        .to_str()
+        .ok_or_else(|| CoreError::CommandDenied("WinGet export path is not UTF-8".to_string()))?
+        .to_string();
+    let result = (|| {
+        read_only_command(
+            executable,
+            vec![
+                "export".to_string(),
+                "--output".to_string(),
+                export_path_argument,
+                "--source".to_string(),
+                "winget".to_string(),
+                "--include-versions".to_string(),
+                "--accept-source-agreements".to_string(),
+                "--disable-interactivity".to_string(),
+            ],
+            &[0],
+        )?;
+        let metadata = fs::metadata(&export_path)?;
+        if metadata.len() > 2 * 1024 * 1024 {
+            return Err(CoreError::ProcessExecution(
+                "WinGet export exceeded the 2 MiB evidence boundary".to_string(),
+            ));
+        }
+        let installed: JsonValue = serde_json::from_slice(&fs::read(&export_path)?)?;
+        let current_version = package_version(&installed, &mapping.package_id);
+        let versions = read_only_command(
+            executable,
+            vec![
+                "show".to_string(),
+                "--id".to_string(),
+                mapping.package_id.clone(),
+                "--source".to_string(),
+                "winget".to_string(),
+                "--exact".to_string(),
+                "--versions".to_string(),
+                "--disable-interactivity".to_string(),
+                "--accept-source-agreements".to_string(),
+            ],
+            &[0],
+        )?;
+        let target_version = first_winget_version(&versions).ok_or_else(|| {
+            CoreError::MalformedInput("WinGet package version missing".to_string())
+        })?;
+        Ok(ManagerStateEvidence {
+            installed: current_version.is_some(),
+            update_available: current_version
+                .as_deref()
+                .is_some_and(|current| current != target_version),
+            current_version,
+            target_version,
+            source: "Live WinGet export and version metadata from source winget".to_string(),
+        })
+    })();
+    let _ = fs::remove_dir_all(export_directory);
+    result
+}
+
+fn first_winget_version(output: &str) -> Option<String> {
+    let mut after_separator = false;
+    for line in output.lines() {
+        let value = line.trim();
+        if value.len() >= 3 && value.chars().all(|character| character == '-') {
+            after_separator = true;
+            continue;
+        }
+        if after_separator && !value.is_empty() {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+fn homebrew_package_entry<'a>(value: &'a JsonValue, package_id: &str) -> Option<&'a JsonValue> {
+    ["formulae", "casks"].iter().find_map(|kind| {
+        value
+            .get(*kind)
+            .and_then(JsonValue::as_array)
+            .and_then(|items| {
+                items.iter().find(|item| {
+                    ["name", "token", "full_name"]
+                        .iter()
+                        .filter_map(|key| item.get(*key))
+                        .filter_map(JsonValue::as_str)
+                        .any(|value| value.eq_ignore_ascii_case(package_id))
+                })
+            })
+    })
+}
+
+fn package_version(value: &JsonValue, package_id: &str) -> Option<String> {
+    match value {
+        JsonValue::Object(object) => {
+            let matches = ["PackageIdentifier", "Id", "id"]
+                .iter()
+                .filter_map(|key| object.get(*key))
+                .filter_map(JsonValue::as_str)
+                .any(|value| value.eq_ignore_ascii_case(package_id));
+            if matches {
+                for key in ["PackageVersion", "Version", "version"] {
+                    if let Some(version) = object.get(key).and_then(JsonValue::as_str) {
+                        return Some(version.to_string());
+                    }
+                }
+            }
+            object
+                .values()
+                .find_map(|value| package_version(value, package_id))
+        }
+        JsonValue::Array(items) => items
+            .iter()
+            .find_map(|value| package_version(value, package_id)),
+        _ => None,
+    }
+}
+
+pub(super) fn read_only_command(
+    executable: &str,
+    args: Vec<String>,
+    accepted_exit_codes: &[i32],
+) -> Result<String, CoreError> {
+    let supervisor = AllowlistedProcessSupervisor::new([AllowedCommand {
+        alias: "lifecycle-manager-evidence".to_string(),
+        executable: PathBuf::from(executable),
+        args: args.iter().cloned().map(ArgRule::Exact).collect(),
+        environment: super::command::command_environment(executable),
+    }]);
+    let outcome = supervisor.execute(
+        &ExecutionRequest {
+            command_alias: "lifecycle-manager-evidence".to_string(),
+            args,
+            timeout_ms: 60_000,
+            output_limit_bytes: 256 * 1024,
+        },
+        &CancelSignal::default(),
+    )?;
+    if outcome.status != ExecutionStatus::Completed
+        || !outcome
+            .exit_code
+            .is_some_and(|code| accepted_exit_codes.contains(&code))
+    {
+        return Err(CoreError::ProcessExecution(
+            "authoritative manager metadata query failed".to_string(),
+        ));
+    }
+    Ok(outcome.stdout)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_winget_structured_export_and_locale_independent_version_rows() {
+        let fixture = serde_json::json!({
+            "Sources": [{ "Packages": [{
+                "PackageIdentifier": "Git.Git",
+                "Version": "2.51.0"
+            }] }]
+        });
+        assert_eq!(
+            package_version(&fixture, "git.git").as_deref(),
+            Some("2.51.0")
+        );
+        assert_eq!(
+            first_winget_version("Version\n-------\n2.52.0\n2.51.0\n").as_deref(),
+            Some("2.52.0")
+        );
+    }
+}

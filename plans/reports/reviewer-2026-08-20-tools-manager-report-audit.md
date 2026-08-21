@@ -1,9 +1,9 @@
 # Tools Manager — Product Report Audit
 
-**Version:** 0.2.0
+**Version:** 0.2.1
 **Date:** 2026-08-20
 **Status:** Final
-**Source:** `researcher-2026-08-20-tools-manager-market-and-mvp.md` v0.3.1 reviewed; fixes applied in v0.4.0
+**Source:** `researcher-2026-08-20-tools-manager-market-and-mvp.md` v0.3.1 reviewed; fixes applied in v0.4.0; approved UI-first delivery amendment applied in v0.4.1
 **Owner:** Project lead
 
 ---
@@ -118,14 +118,14 @@ Each phase must have a narrow acceptance gate and must not imply mutation suppor
 
 ## 5. Plan readiness
 
-**Decision:** Ready for implementation planning after approved corrections.
+**Decision:** Ready for implementation planning after approved corrections and the UI-first delivery amendment.
 
-F1–F5 are incorporated in source report v0.4.0. F6 shapes the implementation plan at `plans/260820-1901-tools-manager-mvp-implementation/`. The two existing unresolved product decisions do not block foundation and read-only phases, but they remain explicit gates:
+F1–F5 are incorporated in source report v0.4.0. F6 shapes the implementation plan at `plans/260820-1901-tools-manager-mvp-implementation/`. Source report v0.4.1 adds the project-lead decision to complete, verify, and lock the Mobbin-informed interface before backend logic. The two existing unresolved product decisions do not block interface, foundation, or read-only phases, but they remain explicit gates:
 
 - trusted skill catalog publisher/review/authentication blocks managed skill installation and updates;
 - supported OS versions and CPU architectures block the final release matrix, not initial contract work.
 
-Applied source-report version: **0.4.0**. The change adds durable mapping-state and lifecycle-execution contracts while preserving confirmed product decisions.
+Applied source-report version: **0.4.1**. Version 0.4.0 added durable mapping-state and lifecycle-execution contracts; v0.4.1 adds the approved UI-first delivery order and UI-contract lock while preserving confirmed product scope.
 
 ## 6. Proposed document changes
 
@@ -150,3 +150,4 @@ Applied source-report version: **0.4.0**. The change adds durable mapping-state 
 |---|---|---|---|
 | 0.1.0 | 2026-08-20 | Reviewer | Audit product contracts, lifecycle semantics, skill-root handling, privilege boundary, self-update, and plan readiness. |
 | 0.2.0 | 2026-08-20 | Codex | Record user approval, mark all six findings applied in source report v0.4.0, and link the implementation plan. |
+| 0.2.1 | 2026-08-20 | Codex | Record the approved Mobbin-informed UI-first phase, project-lead verification gate, UI Contract v1 lock, and source report v0.4.1. |

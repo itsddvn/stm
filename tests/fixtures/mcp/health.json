@@ -1,0 +1,6 @@
+[
+  { "id": "filesystem", "health": "healthy", "lastChecked": "2 minutes ago" },
+  { "id": "github", "health": "healthy", "lastChecked": "5 minutes ago" },
+  { "id": "sentry", "health": "degraded", "lastChecked": "18 minutes ago" },
+  { "id": "postgres", "health": "unknown", "lastChecked": "Never" }
+]
