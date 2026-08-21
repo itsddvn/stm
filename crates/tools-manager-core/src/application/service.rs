@@ -775,16 +775,24 @@ mod tests {
         );
         let (mut current, _, _) = service.build_snapshot().expect("snapshot");
         let mut previous = current.clone();
+        let versions = load_version_catalog(&service.workspace).expect("versions");
+        let expected_version = Some(
+            versions
+                .tool_updates
+                .get("codex-cli")
+                .expect("codex update evidence")
+                .target_version
+                .clone(),
+        );
         let tool = previous
             .tools
             .iter_mut()
             .find(|tool| tool.id == "codex-cli")
             .expect("codex tool");
-        tool.installed_version = tool.available_version.clone();
+        tool.installed_version = expected_version.clone();
+        tool.available_version = expected_version.clone();
         tool.state = InventoryState::ManagedCurrent;
         tool.lifecycle_confidence = "Live manager postcondition".to_string();
-        let expected_version = tool.available_version.clone();
-        let versions = load_version_catalog(&service.workspace).expect("versions");
 
         let pending =
             merge_authoritative_lifecycle_tool_state(&previous, &mut current, &versions, |_, _| {

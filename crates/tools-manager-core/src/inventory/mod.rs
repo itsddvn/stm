@@ -737,7 +737,14 @@ mod tests {
             .iter()
             .find(|tool| tool.id == "orca-ade")
             .expect("orca");
-        assert_eq!(orca.owner, "Vendor updater");
+        assert_eq!(
+            orca.owner,
+            if current_platform_slug().starts_with("macos_") {
+                "Vendor updater"
+            } else {
+                "Unsupported"
+            }
+        );
 
         let cursor = inventory
             .tools

@@ -6,6 +6,15 @@ use std::{
     time::UNIX_EPOCH,
 };
 
+#[cfg(target_os = "windows")]
+use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::{
+    Foundation::{ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS},
+    Storage::Packaging::Appx::{GetPackagePathByFullName, GetPackagesByPackageFamily},
+};
+
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -411,19 +420,7 @@ fn standard_candidates(name: &str) -> Vec<PathBuf> {
         ],
         "npm" => node_runtime_candidates("npm"),
         "node" => node_runtime_candidates("node"),
-        "winget" => {
-            let mut candidates = Vec::new();
-            if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
-                candidates.push(
-                    PathBuf::from(local_app_data)
-                        .join("Microsoft")
-                        .join("WindowsApps")
-                        .join("winget.exe"),
-                );
-            }
-            candidates.push(PathBuf::from(r"C:\Windows\System32\winget.exe"));
-            candidates
-        }
+        "winget" => winget_package_candidates(),
         "apt-get" => vec![PathBuf::from("/usr/bin/apt-get")],
         "apt-cache" => vec![PathBuf::from("/usr/bin/apt-cache")],
         "dpkg-query" => vec![PathBuf::from("/usr/bin/dpkg-query")],
@@ -433,6 +430,83 @@ fn standard_candidates(name: &str) -> Vec<PathBuf> {
         "pkexec" => vec![PathBuf::from("/usr/bin/pkexec")],
         _ => Vec::new(),
     }
+}
+
+#[cfg(target_os = "windows")]
+fn winget_package_candidates() -> Vec<PathBuf> {
+    let package_family = "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut package_count = 0_u32;
+    let mut names_buffer_length = 0_u32;
+    let status = unsafe {
+        GetPackagesByPackageFamily(
+            package_family.as_ptr(),
+            &mut package_count,
+            std::ptr::null_mut(),
+            &mut names_buffer_length,
+            std::ptr::null_mut(),
+        )
+    };
+    if status != ERROR_INSUFFICIENT_BUFFER || package_count == 0 || names_buffer_length == 0 {
+        return Vec::new();
+    }
+
+    let mut package_names = vec![std::ptr::null_mut(); package_count as usize];
+    let mut names_buffer = vec![0_u16; names_buffer_length as usize];
+    let status = unsafe {
+        GetPackagesByPackageFamily(
+            package_family.as_ptr(),
+            &mut package_count,
+            package_names.as_mut_ptr(),
+            &mut names_buffer_length,
+            names_buffer.as_mut_ptr(),
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return Vec::new();
+    }
+
+    let mut candidates = package_names
+        .into_iter()
+        .filter_map(|package_name| winget_package_path(package_name))
+        .map(|root| root.join("winget.exe"))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    // Prefer the newest registered App Installer package when multiple versions remain staged.
+    candidates.sort_by(|left, right| right.cmp(left));
+    candidates
+}
+
+#[cfg(target_os = "windows")]
+fn winget_package_path(package_name: *mut u16) -> Option<PathBuf> {
+    if package_name.is_null() {
+        return None;
+    }
+    let mut path_length = 0_u32;
+    let status =
+        unsafe { GetPackagePathByFullName(package_name, &mut path_length, std::ptr::null_mut()) };
+    if status != ERROR_INSUFFICIENT_BUFFER || path_length == 0 {
+        return None;
+    }
+
+    let mut path = vec![0_u16; path_length as usize];
+    let status =
+        unsafe { GetPackagePathByFullName(package_name, &mut path_length, path.as_mut_ptr()) };
+    if status != ERROR_SUCCESS {
+        return None;
+    }
+    let end = path
+        .iter()
+        .position(|value| *value == 0)
+        .unwrap_or(path.len());
+    Some(PathBuf::from(OsString::from_wide(&path[..end])))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn winget_package_candidates() -> Vec<PathBuf> {
+    Vec::new()
 }
 
 pub(super) fn validate_package_id(adapter: &str, value: &str) -> Result<(), CoreError> {

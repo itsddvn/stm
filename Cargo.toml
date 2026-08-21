@@ -24,7 +24,7 @@ tauri-build = { version = "=2.6.2" }
 tauri-plugin-single-instance = "=2.4.3"
 tempfile = "3.20.0"
 libc = "0.2.175"
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_Packaging_Appx", "Win32_System_Threading"] }
 thiserror = "2.0.12"
 time = { version = "0.3.41", features = ["formatting", "parsing"] }
 toml = "0.8.19"

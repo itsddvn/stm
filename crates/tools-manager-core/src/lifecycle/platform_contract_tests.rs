@@ -97,7 +97,7 @@ mod linux {
     #[test]
     #[ignore = "requires a disposable root Fedora runner with DNF repositories"]
     fn disposable_dnf_install_rescan_noop_uninstall() {
-        exercise_install_rescan_noop_uninstall(mapping("dnf", "dnf_package", "jq"));
+        exercise_install_rescan_noop_uninstall(mapping("dnf", "dnf_package", "tree"));
     }
 
     #[test]
