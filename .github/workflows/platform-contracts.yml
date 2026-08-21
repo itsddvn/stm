@@ -28,7 +28,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust 1.88.0
         uses: dtolnay/rust-toolchain@stable
@@ -49,7 +49,7 @@ jobs:
     env:
       STM_DISPOSABLE_LIFECYCLE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust 1.88.0
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -69,7 +69,7 @@ jobs:
     name: Disposable APT lifecycle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install, rescan, verify no-op, and uninstall with generated APT command
         run: >-
           docker run --rm
@@ -85,7 +85,7 @@ jobs:
     name: Disposable DNF lifecycle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust 1.88.0 and execute generated DNF lifecycle in Fedora
         run: >-
           docker run --rm
@@ -106,7 +106,7 @@ jobs:
     name: Disposable Pacman uninstall lifecycle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust 1.88.0 and exercise reviewed Pacman uninstall in Arch
         run: >-
           docker run --rm
@@ -126,7 +126,7 @@ jobs:
     name: Non-root privilege broker denial
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify missing pkexec degrades reviewed mutation to detect-only
         run: >-
           docker run --rm
@@ -150,7 +150,7 @@ jobs:
     env:
       STM_DISPOSABLE_LIFECYCLE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust 1.88.0
         uses: dtolnay/rust-toolchain@stable
         with:
