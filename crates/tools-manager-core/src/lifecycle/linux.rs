@@ -56,13 +56,13 @@ fn inspect_dnf(mapping: &ToolCatalogMapping) -> Result<ManagerStateEvidence, Cor
         path_text(&rpm),
         vec![
             "-q".to_string(),
-            "--qf".to_string(),
-            "%{EVR}\n".to_string(),
+            "--queryformat".to_string(),
+            "stm-installed:%{EVR}\n".to_string(),
             mapping.package_id.clone(),
         ],
         &[0, 1],
     )?;
-    let current_version = first_value_line(&installed_output);
+    let current_version = parse_tagged_version(&installed_output, "stm-installed:");
     let candidate_output = read_only_command(
         path_text(&dnf),
         vec![
@@ -70,12 +70,12 @@ fn inspect_dnf(mapping: &ToolCatalogMapping) -> Result<ManagerStateEvidence, Cor
             "repoquery".to_string(),
             "--latest-limit=1".to_string(),
             "--qf".to_string(),
-            "%{evr}".to_string(),
+            "stm-candidate:%{evr}".to_string(),
             mapping.package_id.clone(),
         ],
         &[0],
     )?;
-    let target_version = first_value_line(&candidate_output)
+    let target_version = parse_tagged_version(&candidate_output, "stm-candidate:")
         .ok_or_else(|| CoreError::MalformedInput("DNF candidate version missing".to_string()))?;
     Ok(manager_evidence(
         current_version,
@@ -165,6 +165,16 @@ fn parse_pacman_query(output: &str, package_id: &str) -> Option<String> {
     })
 }
 
+fn parse_tagged_version(output: &str, prefix: &str) -> Option<String> {
+    output.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(prefix)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
 fn first_value_line(output: &str) -> Option<String> {
     output
         .lines()
@@ -190,6 +200,14 @@ mod tests {
         assert_eq!(
             parse_pacman_query("git 2.51.0-1\n", "git").as_deref(),
             Some("2.51.0-1")
+        );
+        assert_eq!(
+            parse_tagged_version("stm-installed:2.0-1.fc42\n", "stm-installed:").as_deref(),
+            Some("2.0-1.fc42")
+        );
+        assert_eq!(
+            parse_tagged_version("package tree is not installed\n", "stm-installed:"),
+            None
         );
     }
 }

@@ -97,6 +97,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 --silent --show-error --fail https://sh.rustup.rs |
           sh -s -- -y --profile minimal --default-toolchain 1.88.0 &&
           source /root/.cargo/env &&
+          (dnf remove --assumeyes tree || true) &&
           cargo test -p tools-manager-core
           lifecycle::platform_contract_tests::linux::disposable_dnf_install_rescan_noop_uninstall
           -- --ignored --exact --nocapture"
