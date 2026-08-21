@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Phase 5: Safe Tool Lifecycle"
-status: in-progress
+status: completed
 priority: P1
 effort: "7-10 engineer-weeks"
 dependencies: [3, 4]
@@ -39,7 +39,7 @@ Implement reviewed source-URL analysis plus immutable tool-operation planning an
 - [x] Implement `vendor_handoff` as an explicit non-transactional flow with separate result semantics and the approved handoff interface.
 - [x] Request platform-native privilege only for the exact approved operation; scans/checks never elevate.
 - [x] Support cancellation, manager locks, network failure, stale state, privilege denial, structured logs, and deterministic rescan through approved states.
-- [ ] Promote each Recommended tool mapping only after its own detector/update/plan/no-op/failure/uninstall contract suite passes.
+- [x] Promote each Recommended tool mapping only after its own detector/update/plan/no-op/failure/uninstall contract suite passes.
 - [x] Activate existing UI controls through typed IPC and reason codes; do not redesign the approved plan, consent, progress, result, or recovery flows.
 
 ## Architecture
@@ -102,8 +102,8 @@ Policy is deny-by-default. Catalog data selects mapping metadata; compiled adapt
 - [x] Pasted non-HTTPS, credential-bearing, unmatched, ambiguous, unsupported, and oversized/timeout source URLs never reach managed execution planning.
 - [x] Stale or expired consent never executes.
 - [x] Detect-only, handoff-only, external, system-owned, unknown, and unsupported cases cannot enter the managed executor.
-- [ ] WinGet, Homebrew formula/cask, and npm disposable lifecycle jobs are required before their promoted mappings merge.
-- [ ] APT and DNF pass disposable lifecycle plus privilege-boundary suites; Pacman install/update remains detect-only and passes fail-closed policy tests.
+- [x] WinGet, Homebrew formula/cask, and npm disposable lifecycle jobs are required before their promoted mappings merge.
+- [x] APT and DNF pass disposable lifecycle plus privilege-boundary suites; Pacman install/update remains detect-only and passes fail-closed policy tests.
 - [x] Handoff results never claim transactional rollback or app-owned uninstall.
 - [x] System-owned Git cannot be removed or updated through Homebrew.
 - [x] Bulk results report every selected item even after individual failure.
@@ -111,8 +111,8 @@ Policy is deny-by-default. Catalog data selects mapping metadata; compiled adapt
 
 ## Success Criteria
 
-- [ ] At least one reviewed mapping on each approved desktop OS completes safe managed lifecycle, or the OS is explicitly release-blocked/read-only by Phase 2 policy.
-- [ ] Repeated install of intended version is no-op.
+- [x] At least one reviewed mapping on each approved desktop OS completes safe managed lifecycle, or the OS is explicitly release-blocked/read-only by Phase 2 policy.
+- [x] Repeated install of intended version is no-op.
 - [x] Every action shows the exact immutable plan in the approved preview before consent and rejects state drift.
 - [x] A reviewed supported source URL reaches the same immutable owner-adapter plan as catalog selection; changing the URL or resolved evidence invalidates consent.
 - [x] No scan, metadata refresh, update check, or handoff preview elevates.
@@ -122,11 +122,11 @@ Policy is deny-by-default. Catalog data selects mapping metadata; compiled adapt
 
 ## Verification Results
 
-- **Local contract suites:** `cargo test --workspace --all-targets` passed 60 tests; three disposable-platform tests remain intentionally ignored outside their dedicated CI jobs.
-- **Frontend and desktop:** UI Contract v1.1 lock, typecheck, lint, 16 UI contract tests, three desktop IPC integration tests, production web build, and packaged Tauri release build pass.
+- **Local contract suites:** the workspace Rust tests, frontend/desktop contracts, production web build, and packaged Tauri release build pass; disposable-platform tests remain isolated to dedicated CI jobs.
 - **Runtime proof:** recovery-plan consent review, credential-bearing source rejection/redaction, and packaged desktop single-instance behavior passed. Report: [Phase 5 post-verify](../../.artifacts/report/20260821-083314-phase-five-lifecycle/report.html) (local ignored artifact).
 - **Review:** independent correctness and security reviewers report READY with no remaining evidence-backed P1/P2 findings.
-- **Remaining release gate:** the GitHub Actions matrix must pass the Windows WinGet, macOS Homebrew/npm, Ubuntu APT, Fedora DNF, Arch Pacman-uninstall, and non-root privilege-denial jobs. Phase 5 remains `in-progress`; mapping promotion, cross-platform success, and no-op acceptance items stay unchecked until CI evidence exists.
+- **Platform CI:** [Lifecycle Platform Contracts run 32440872905](https://github.com/itsddvn/stm/actions/runs/32440872905) passed Windows WinGet, macOS Homebrew formula/cask and npm, Ubuntu APT, Fedora DNF, Arch Pacman-uninstall, non-root privilege-denial, and cross-platform core-contract jobs. [Quality run 32440872961](https://github.com/itsddvn/stm/actions/runs/32440872961) and [UI Contract run 32440872906](https://github.com/itsddvn/stm/actions/runs/32440872906) also passed with Node 24-native action runtimes.
+- **Outcome:** every Phase 5 requirement, todo, and success criterion is complete; the phase is released to Phase 6 without an interface change.
 
 ## Risk Assessment
 

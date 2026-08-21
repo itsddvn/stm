@@ -47,8 +47,8 @@ Source authority: [market and MVP report v0.5.0](../reports/researcher-2026-08-2
 | 2 | [Foundation Contracts and Feasibility](./phase-02-foundation-contracts-and-feasibility.md) | Completed |
 | 3 | [Read-only Core](./phase-03-read-only-core.md) | Completed |
 | 4 | [Desktop Read-only Integration](./phase-04-desktop-read-only-integration.md) | Completed |
-| 5 | [Safe Tool Lifecycle](./phase-05-safe-tool-lifecycle.md) | In progress — local verification green; platform CI pending |
-| 6 | [Trusted Global Skill Lifecycle](./phase-06-trusted-global-skill-lifecycle.md) | Blocked — Phase 5 and trust gate |
+| 5 | [Safe Tool Lifecycle](./phase-05-safe-tool-lifecycle.md) | Completed |
+| 6 | [Trusted Global Skill Lifecycle](./phase-06-trusted-global-skill-lifecycle.md) | Blocked — trust gate |
 | 7 | [MCP Server Lifecycle](./phase-07-mcp-server-lifecycle.md) | Blocked — Phases 5-6 and MCP gate |
 | 8 | [Cross-platform Release Hardening](./phase-08-cross-platform-release-hardening.md) | Blocked — Phases 5-7 and release gates |
 
@@ -98,7 +98,7 @@ Source authority: [market and MVP report v0.5.0](../reports/researcher-2026-08-2
 - Phase 2 is complete: the pinned Rust/Tauri workspace, typed contracts, safe process supervisor, SQLite migration, fixture-backed manager/skill/MCP feasibility adapters, deny-by-default host capabilities, architecture records, and CI gates are implemented. The live macOS Tauri shell renders UI Contract v1; all frontend and Rust quality gates pass. Phase 3 may begin.
 - Phase 3 is complete: ten Recommended and forty Candidate catalog entries, five manager families, compiled tool probes, owner reconciliation, bounded global skill scanning, redacted MCP discovery, transactional SQLite snapshots, authority-scoped update detection, deterministic headless scan events, and locked read models are implemented. Phase 3 verification, all 28 Rust tests, and all frontend quality gates pass; Phase 4 may begin.
 - Phase 4 is complete: the approved React surface selects a typed Tauri runtime client in desktop mode, binds Rust refresh/cancellation/diagnostics/source-analysis behavior, polls and subscribes to progress events, preserves last-good snapshots, retains deterministic browser fixtures, and exposes no lifecycle mutation command to the webview. UI Contract v1, renderer integration tests, frontend/Rust gates, release compilation, native macOS launch, and persisted snapshot checks passed. Phase 5 may begin against locked UI Contract v1.1.
-- Phase 5 implementation is locally complete: bounded source analysis, immutable planning and consent, deny-by-default mapping policy, reviewed manager commands, vendor handoff, privilege boundaries, process supervision, durable receipts/recovery, typed desktop IPC, and locked UI bindings are implemented. The full local Rust/frontend/desktop/build gates and runtime post-verification pass; independent correctness and security reviews are READY. Phase 5 remains in progress until the dedicated Windows, macOS, Ubuntu, Fedora, Arch, and non-root lifecycle jobs pass in GitHub Actions.
+- Phase 5 is complete: bounded source analysis, immutable planning and consent, deny-by-default mapping policy, reviewed manager commands, vendor handoff, privilege boundaries, process supervision, durable receipts/recovery, typed desktop IPC, and locked UI bindings are implemented. Local Rust/frontend/desktop/build gates, runtime post-verification, and independent correctness/security reviews passed. GitHub Actions [Lifecycle Platform Contracts run 32440872905](https://github.com/itsddvn/stm/actions/runs/32440872905), [Quality run 32440872961](https://github.com/itsddvn/stm/actions/runs/32440872961), and [UI Contract run 32440872906](https://github.com/itsddvn/stm/actions/runs/32440872906) are green with Node 24-native action runtimes. Phase 6 is blocked only by its explicit trusted skill catalog gate.
 
 ## Validation Log
 
@@ -194,10 +194,10 @@ Source authority: [market and MVP report v0.5.0](../reports/researcher-2026-08-2
 
 #### Verification Results
 
-- `cargo test --workspace --all-targets`: 60 passed; three disposable-platform tests intentionally ignored outside their dedicated jobs.
-- `pnpm verify:phase-two-foundation`, `pnpm verify:phase-three-core`, `pnpm verify:phase-four-desktop`, `pnpm test:desktop-integration`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, UI Contract v1.1 verification, production web build, and packaged Tauri release build passed.
+- Workspace Rust tests, frontend/desktop contracts, UI Contract v1.1 verification, production web build, and packaged Tauri release build passed locally.
 - Runtime post-verification passed recovery-plan consent review, credential-bearing source rejection/redaction, and packaged single-instance behavior.
 - Independent correctness and security reviewers returned READY; no evidence-backed P1/P2 remains.
-- Phase 5 remains `in-progress`: disposable platform jobs require GitHub Actions execution. Phase 6 remains blocked by Phase 5 and the unresolved trusted skill catalog publisher/review/authentication gate.
+- GitHub Actions [Lifecycle Platform Contracts run 32440872905](https://github.com/itsddvn/stm/actions/runs/32440872905) passed all Windows, macOS, Ubuntu, Fedora, Arch, non-root, and cross-platform core jobs. [Quality run 32440872961](https://github.com/itsddvn/stm/actions/runs/32440872961) and [UI Contract run 32440872906](https://github.com/itsddvn/stm/actions/runs/32440872906) also passed after action runtimes moved to Node 24.
+- Phase 5 is complete. Phase 6 remains blocked only by the trusted skill catalog publisher/review/authentication gate.
 
 <!-- slug: tools-manager-mvp-implementation -->
