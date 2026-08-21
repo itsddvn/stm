@@ -1,6 +1,7 @@
 name: Lifecycle Platform Contracts
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - ".github/workflows/platform-contracts.yml"
