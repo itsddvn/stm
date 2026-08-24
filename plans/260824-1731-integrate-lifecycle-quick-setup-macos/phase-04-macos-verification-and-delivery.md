@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "macOS verification and delivery"
-status: in-progress
+status: completed
 priority: P1
 effort: "1d"
 dependencies: [3]
@@ -46,11 +46,11 @@ Verification covers core contracts, runtime adapters, Tauri IPC, browser present
 - [x] Isolated packaged Skill/MCP recovery evidence passes
 - [x] Review findings resolved
 - [x] Durable evidence retained
-- [ ] Main pushed and worktree removed
+- [x] Main pushed and worktree removed
 
 ## Success Criteria
 
-- [ ] `main` contains both verified histories, remote refs match, durable evidence remains, and only the clean main worktree remains. UI locking stays explicitly outside this milestone pending project-lead approval.
+- [x] `main` contains both verified histories, remote refs match, durable evidence remains, and only the clean main worktree remains. UI locking stays explicitly outside this milestone pending project-lead approval.
 
 ## Risk Assessment
 

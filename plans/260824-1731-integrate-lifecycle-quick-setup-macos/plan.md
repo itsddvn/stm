@@ -1,7 +1,7 @@
 ---
 title: "Integrate lifecycle Quick Setup macOS"
 description: "Unify the canonical stm-core/stm-runtime Quick Setup branch with Skill, MCP, updater, and release work from main, then deliver a verified internal macOS app."
-status: in-progress
+status: completed
 priority: P1
 effort: "multi-day"
 tags: [integration, macos, quick-setup, lifecycle]
@@ -35,10 +35,10 @@ One branch and internal macOS `.app` containing every accepted capability. No `d
 
 | # | Phase | Status | Dependency |
 |---|---|---|---|
-| 1 | [Merge foundation](./phase-01-start.md) | In progress | None |
-| 2 | [Runtime and lifecycle integration](./phase-02-runtime-and-lifecycle-integration.md) | Pending | 1 |
-| 3 | [Desktop and localization integration](./phase-03-desktop-and-localization-integration.md) | Pending | 2 |
-| 4 | [macOS verification and delivery](./phase-04-macos-verification-and-delivery.md) | Pending | 3 |
+| 1 | [Merge foundation](./phase-01-start.md) | Completed | None |
+| 2 | [Runtime and lifecycle integration](./phase-02-runtime-and-lifecycle-integration.md) | Completed | 1 |
+| 3 | [Desktop and localization integration](./phase-03-desktop-and-localization-integration.md) | Completed | 2 |
+| 4 | [macOS verification and delivery](./phase-04-macos-verification-and-delivery.md) | Completed | 3 |
 
 ## Dependencies
 
@@ -48,9 +48,9 @@ One branch and internal macOS `.app` containing every accepted capability. No `d
 
 ## Success Criteria
 
-- [ ] Merge commit contains both branch histories and zero unresolved conflicts.
-- [ ] Canonical crate names and dependency direction remain enforced.
-- [ ] Rust, frontend, desktop integration, security, release, and contract gates pass.
-- [ ] Internal macOS `.app` builds and launches.
-- [ ] Native live inventory and Quick Setup review pass without mutating packages.
-- [ ] Integrated branch merges into `main`, pushes successfully, and temporary worktree is removed.
+- [x] Merge commit contains both branch histories and zero unresolved conflicts.
+- [x] Canonical crate names and dependency direction remain enforced.
+- [x] Rust, frontend, desktop integration, security, release, and contract gates pass.
+- [x] Internal macOS `.app` builds and launches.
+- [x] Native live inventory and Quick Setup review pass without mutating packages.
+- [x] Integrated branch merges into `main`, pushes successfully, and temporary worktree is removed.

@@ -1,0 +1,154 @@
+   Compiling stm-core v0.1.0 (/Users/itsddvn/projects/worktrees/tools-managers-integrate-lifecycle-quick-setup/crates/stm-core)
+   Compiling stm-runtime v0.1.0 (/Users/itsddvn/projects/worktrees/tools-managers-integrate-lifecycle-quick-setup/crates/stm-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.79s
+     Running unittests src/lib.rs (target/debug/deps/stm_runtime-2576aba7d33368f6)
+
+running 1 test
+live warnings: [
+  "Cursor config uses unsupported schema root"
+]
+{
+  "target": "macos_arm64",
+  "preference": "automatic",
+  "dismissed": false,
+  "providers": {
+    "generation": "macos-aarch64",
+    "homebrew": {
+      "kind": "homebrew",
+      "path": "/opt/homebrew/bin/brew",
+      "version": null,
+      "trust": "approved_root"
+    },
+    "bun": null,
+    "node": {
+      "kind": "node",
+      "path": "/opt/homebrew/Cellar/node/26.0.0/bin/node",
+      "version": null,
+      "trust": "approved_root"
+    },
+    "npm": {
+      "kind": "npm",
+      "path": "/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js",
+      "version": null,
+      "trust": "approved_root"
+    }
+  },
+  "tools": [
+    {
+      "id": "git",
+      "name": "Git",
+      "summary": "Distributed source control.",
+      "selected": false,
+      "optional": false,
+      "action": "installed",
+      "reason": null,
+      "owner": "External",
+      "mappingId": null
+    },
+    {
+      "id": "orca-ade",
+      "name": "Orca",
+      "summary": "Agentic development environment.",
+      "selected": true,
+      "optional": false,
+      "action": "handoff",
+      "reason": null,
+      "owner": "Vendor updater",
+      "mappingId": null
+    },
+    {
+      "id": "cmux-desktop",
+      "name": "cmux desktop",
+      "summary": "Terminal workspace for agent workflows.",
+      "selected": false,
+      "optional": false,
+      "action": "installed",
+      "reason": null,
+      "owner": "Homebrew",
+      "mappingId": null
+    },
+    {
+      "id": "orbstack",
+      "name": "OrbStack",
+      "summary": "Fast local containers and Linux machines.",
+      "selected": true,
+      "optional": false,
+      "action": "install",
+      "reason": null,
+      "owner": "Homebrew",
+      "mappingId": "homebrew:orbstack"
+    },
+    {
+      "id": "agentkit-cli",
+      "name": "AgentKit CLI",
+      "summary": "Agent workflow toolkit.",
+      "selected": false,
+      "optional": false,
+      "action": "installed",
+      "reason": null,
+      "owner": "External",
+      "mappingId": null
+    },
+    {
+      "id": "codex-cli",
+      "name": "Codex CLI",
+      "summary": "OpenAI coding agent.",
+      "selected": true,
+      "optional": false,
+      "action": "install",
+      "reason": null,
+      "owner": "npm",
+      "mappingId": "homebrew:codex"
+    },
+    {
+      "id": "cloudflared",
+      "name": "cloudflared",
+      "summary": "Cloudflare Tunnel connector.",
+      "selected": true,
+      "optional": false,
+      "action": "update",
+      "reason": null,
+      "owner": "Homebrew",
+      "mappingId": null
+    }
+  ],
+  "optionalSkills": [],
+  "optionalMcp": [
+    {
+      "id": "docker-desktop",
+      "name": "Docker Desktop",
+      "summary": "Container development environment.",
+      "selected": false,
+      "optional": true,
+      "action": "handoff",
+      "reason": null,
+      "owner": "Vendor updater",
+      "mappingId": null
+    },
+    {
+      "id": "oh-my-pi",
+      "name": "Oh My Pi",
+      "summary": "Terminal-first coding agent.",
+      "selected": false,
+      "optional": true,
+      "action": "installed",
+      "reason": null,
+      "owner": "Homebrew",
+      "mappingId": null
+    },
+    {
+      "id": "grok-build",
+      "name": "Grok Build",
+      "summary": "AI coding CLI.",
+      "selected": false,
+      "optional": true,
+      "action": "guidance",
+      "reason": null,
+      "owner": "Vendor updater",
+      "mappingId": null
+    }
+  ]
+}
+test native_quick_setup_tests::native_quick_setup_uses_live_host_evidence ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 53 filtered out; finished in 11.20s
