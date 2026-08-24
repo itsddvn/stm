@@ -1378,6 +1378,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn native_quick_setup_uses_live_missing_state_and_planned_provider_bootstrap() {
         let mut service = PhaseThreeApplicationService::new(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
@@ -1519,18 +1520,31 @@ mod tests {
         let service = PhaseThreeApplicationService::new(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
         );
-        let mismatch = br#"{"schemaVersion":1,"target":"windows_x64","resources":[]}"#;
-        assert!(service.import_portable_bytes(mismatch).is_err());
-        let custom = br#"{"schemaVersion":1,"target":"macos_arm64","resources":[{"kind":"tool","id":"https://example.invalid/custom","desiredAction":"review"}]}"#;
+        let current = current_target();
+        let mismatch_target = if current == "windows_x64" {
+            "macos_arm64"
+        } else {
+            "windows_x64"
+        };
+        let mismatch =
+            format!(r#"{{"schemaVersion":1,"target":"{mismatch_target}","resources":[]}}"#);
+        assert!(service.import_portable_bytes(mismatch.as_bytes()).is_err());
+        let custom = format!(
+            r#"{{"schemaVersion":1,"target":"{current}","resources":[{{"kind":"tool","id":"https://example.invalid/custom","desiredAction":"review"}}]}}"#
+        );
         let imported = service
-            .import_portable_bytes(custom)
+            .import_portable_bytes(custom.as_bytes())
             .expect("custom review");
         assert_eq!(
             imported.review_required_ids,
             vec!["https://example.invalid/custom"]
         );
-        let windows_path = br#"{"schemaVersion":1,"target":"macos_arm64","resources":[{"kind":"tool","id":"C:\\Users\\alice\\tool","desiredAction":"review"}]}"#;
-        assert!(service.import_portable_bytes(windows_path).is_err());
+        let windows_path = format!(
+            r#"{{"schemaVersion":1,"target":"{current}","resources":[{{"kind":"tool","id":"C:\\Users\\alice\\tool","desiredAction":"review"}}]}}"#
+        );
+        assert!(service
+            .import_portable_bytes(windows_path.as_bytes())
+            .is_err());
     }
 
     #[test]

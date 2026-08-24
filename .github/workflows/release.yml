@@ -122,6 +122,8 @@ jobs:
         with:
           output: ../results
           upload: never
+      - name: Report CodeQL findings
+        run: jq -r '.runs[].results[]? | [(.level // "warning"), (.ruleId // "unknown"), (.message.text // ""), (.locations[0].physicalLocation.artifactLocation.uri // "")] | @tsv' ../results/javascript.sarif
       - name: Reject CodeQL findings without GitHub Advanced Security
         run: jq -e '[.runs[].results[]?] | length == 0' ../results/javascript.sarif
 

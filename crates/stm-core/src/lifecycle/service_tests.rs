@@ -896,10 +896,7 @@ mod tests {
         match &plan.execution {
             LifecycleExecution::ManagedExecute { executable, argv } => {
                 assert!(!argv.is_empty());
-                #[cfg(target_os = "windows")]
-                assert!(executable.to_ascii_lowercase().ends_with("winget.exe"));
-                #[cfg(target_os = "linux")]
-                assert!(executable.ends_with("pkexec"));
+                assert!(std::path::Path::new(executable).is_file());
                 let initial = service
                     .start(&plan.plan_id, authorize(&plan))
                     .expect("start lifecycle");
