@@ -12,7 +12,11 @@ import {
   buildSkillResolutionActions,
   buildToolPrimaryAction,
 } from "../fixtures/presentation-action-fixtures";
+import { buildQuickSetupView } from "../fixtures/setup-fixtures";
+import { toolFixtures } from "../fixtures/tool-fixtures";
+import { assertPortableExportSafe, validatePortableSetupText } from "../fixtures/portable-validate";
 import { mockIpcClient } from "../lib/ipc/mock-ipc-client";
+import { englishMessages, resolveLocale, vietnameseMessages } from "../lib/i18n";
 
 function authorize(plan: { digest: string; expiresAt: string }) {
   return {
@@ -23,6 +27,12 @@ function authorize(plan: { digest: string; expiresAt: string }) {
 }
 
 describe("fixture-backed UI contract", () => {
+  it("defaults to Vietnamese and keeps both locale catalogs complete", () => {
+    expect(resolveLocale(null)).toBe("vi");
+    expect(resolveLocale("vi")).toBe("vi");
+    expect(resolveLocale("en")).toBe("en");
+    expect(Object.keys(englishMessages).sort()).toEqual(Object.keys(vietnameseMessages).sort());
+  });
   it("has one deterministic fixture for every scenario", () => {
     expect(matrix.contractVersion).toBe("1.1.0-review");
     expect(matrix.scenarios.map((scenario) => scenario.id)).toEqual(scenarioIds);
@@ -338,5 +348,64 @@ describe("fixture-backed UI contract", () => {
       executable: "/usr/local/bin/node",
       argv: ["/usr/local/lib/node_modules/npm/bin/npm-cli.js", "install", "--global", "@openai/codex@0.32.1"],
     });
+  });
+
+  it("labels current tools as installed instead of preview update", () => {
+    const git = toolFixtures.find((tool) => tool.id === "git");
+    expect(git?.state).toBe("managed_current");
+    expect(buildToolPrimaryAction(git!).label).toBe("Installed");
+    expect(buildToolPrimaryAction(git!).id).toBe("tool.inspect_current");
+  });
+  it("loads default Mac tools selected except already installed ones", () => {
+    const setup = buildQuickSetupView(toolFixtures);
+    const git = setup.tools.find((row) => row.id === "git");
+    expect(git?.action).toBe("installed");
+    expect(git?.selected).toBe(false);
+    expect(setup.tools.find((row) => row.id === "orbstack")?.selected).toBe(true);
+    expect(setup.optional.some((row) => row.id === "oh-my-pi")).toBe(true);
+    expect(setup.tools.find((row) => row.id === "cloudflared")?.selected).toBe(false);
+    expect(setup.tools.find((row) => row.id === "cloudflared")?.action).toBe("blocked");
+  });
+
+  it("prepares a mixed setup-queue from selected tool ids", async () => {
+    const plan = await mockIpcClient.prepareLifecycle({
+      resourceKind: "operation",
+      action: "setup-queue",
+      resourceId: "quick-setup",
+      itemIds: ["git", "codex-cli"],
+    });
+    expect(plan.execution.mode).toBe("batch");
+    expect(plan.request.action).toBe("setup-queue");
+  });
+
+  it("rejects portable files with commands or a foreign OS", () => {
+    expect(() => validatePortableSetupText(JSON.stringify({
+      schemaVersion: 1,
+      target: "macos_arm64",
+      resources: [{ kind: "tool", id: "git", desiredAction: "install", command: "rm -rf /" }],
+    }), "macos_arm64")).toThrow(/shell or executable/);
+    expect(() => validatePortableSetupText(JSON.stringify({
+      schemaVersion: 1,
+      target: "windows_x64",
+      resources: [{ kind: "tool", id: "git", desiredAction: "install" }],
+    }), "macos_arm64")).toThrow(/cannot be imported/);
+    expect(() => validatePortableSetupText(JSON.stringify({
+      schemaVersion: 1,
+      target: "macos_arm64",
+      resources: [{ kind: "tool", id: "C:relative", desiredAction: "review" }],
+    }), "macos_arm64")).toThrow(/machine paths/);
+    expect(() => validatePortableSetupText(JSON.stringify({
+      schemaVersion: 1,
+      target: "macos_arm64",
+      resources: Array.from({ length: 33 }, (_, index) => ({ kind: "tool", id: `tool-${index}`, desiredAction: "review" })),
+    }), "macos_arm64")).toThrow(/exceeds 32/);
+  });
+
+  it("blocks secret-shaped portable exports", () => {
+    expect(() => assertPortableExportSafe(JSON.stringify({
+      schemaVersion: 1,
+      target: "macos_arm64",
+      resources: [{ kind: "mcp", id: "x", desiredAction: "add", token: "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }],
+    }))).toThrow(/secret-shaped/);
   });
 });

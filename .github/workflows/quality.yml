@@ -51,10 +51,10 @@ jobs:
         run: cargo fmt --check
 
       - name: Rust clippy
-        run: cargo clippy -p tools-manager-core --all-targets -- -D warnings
+        run: cargo clippy -p stm-core --all-targets -- -D warnings
 
       - name: Rust tests
-        run: cargo test -p tools-manager-core
+        run: cargo test -p stm-core
 
   desktop-integration:
     runs-on: macos-latest

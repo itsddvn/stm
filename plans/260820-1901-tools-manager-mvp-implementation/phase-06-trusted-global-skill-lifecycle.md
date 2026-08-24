@@ -68,10 +68,10 @@ Physical target identity is canonical path + installation identity. Logical clie
 ## Related Code Files
 
 - Create: `/Users/itsddvn/projects/tools-managers/catalog/skills/` and trusted catalog metadata schema
-- Create: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/skills/catalog/`, `resolver/`, `staging/`, `validation/`, `diff/`, `materialization/`, `rollback/`
+- Create: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/skills/catalog/`, `resolver/`, `staging/`, `validation/`, `diff/`, `materialization/`, `rollback/`
 - Create: `/Users/itsddvn/projects/tools-managers/tests/fixtures/skill-lifecycle/`
-- Modify: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/planning/` and `policy/` to add skill-specific immutable plan evidence without weakening Phase 5 guarantees
-- Modify: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/storage/` for receipts, previous revisions, and partial results
+- Modify: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/planning/` and `policy/` to add skill-specific immutable plan evidence without weakening Phase 5 guarantees
+- Modify: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/storage/` for receipts, previous revisions, and partial results
 - Modify: `/Users/itsddvn/projects/tools-managers/src/features/skills/`, `/Users/itsddvn/projects/tools-managers/src/features/updates/`, `/Users/itsddvn/projects/tools-managers/src/features/history/` only to bind approved actions and verified defect fixes
 - Modify: `/Users/itsddvn/projects/tools-managers/src-tauri/src/commands/` for skill plan/consent/materialization commands
 

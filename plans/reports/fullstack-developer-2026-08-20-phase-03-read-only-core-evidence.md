@@ -8,7 +8,7 @@ Scope: final Phase 3 wiring only. No locked UI artifacts or plan files changed.
 - Canonical recommended catalog remains locked to exactly ten ids:
   `git`, `orca-ade`, `cmux-desktop`, `docker-desktop`, `orbstack`, `agentkit-cli`, `oh-my-pi`, `codex-cli`, `grok-build`, `cloudflared`.
 - Fixture matrix remains present for manager success, empty, malformed, manager-unavailable, timed-out, and version-variant states across `winget`, `homebrew`, `apt`, `dnf`, and `pacman`.
-- `tools-manager-core` now exports `adapters`, `catalog`, `inventory`, `skills`, `mcp`, `storage`, and `versioning` at the crate root; `application` re-exports them instead of path-mounting duplicate module copies.
+- `stm-core` now exports `adapters`, `catalog`, `inventory`, `skills`, `mcp`, `storage`, and `versioning` at the crate root; `application` re-exports them instead of path-mounting duplicate module copies.
 - Application service exposes deterministic `headless_scan()` output:
   snapshot DTO, refresh status DTO, diagnostics report, ordered scan events, and `elevationRequested = false`.
 - Tauri host exposes `headless_scan`, registers it in the invoke handler, and emits `phase-three-scan` progress events with typed payloads.

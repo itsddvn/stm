@@ -3,8 +3,21 @@ import { ActionDisabledReason } from "../../components/action-disabled-reason";
 import { AppIcon } from "../../components/app-icon";
 import { OwnershipRail } from "../../components/ownership-rail";
 import { StatusBadge } from "../../components/status-badge";
+import { useI18n, type MessageKey } from "../../lib/i18n";
 
 export function ToolDetailPanel({ tool, onPreview }: { tool: ToolViewModel; onPreview: () => void }) {
+  const { t } = useI18n();
+  const actionKey: MessageKey = tool.state === "managed_current"
+    ? "action.installed"
+    : tool.state === "managed_update_available"
+      ? "action.update"
+      : tool.state === "missing"
+        ? "action.install"
+        : tool.executionMode === "vendor_handoff"
+          ? "action.handoff"
+          : tool.executionMode === "detect_only"
+            ? "action.guidance"
+            : "action.blocked";
   const actionReasonId = `tool-action-${tool.id}`;
   return (
     <article className="detail-panel" aria-label={`${tool.name} details`}>
@@ -14,6 +27,8 @@ export function ToolDetailPanel({ tool, onPreview }: { tool: ToolViewModel; onPr
         <StatusBadge state={tool.state} />
       </header>
       <OwnershipRail owner={tool.owner} mode={tool.executionMode} />
+      <details className="advanced-details">
+        <summary>{t("review.advanced")}</summary>
       <dl className="detail-grid">
         <div><dt>Installed</dt><dd className="mono-data">{tool.installedVersion ?? "Not installed"}</dd></div>
         <div><dt>Available</dt><dd className="mono-data">{tool.availableVersion ?? "Not checked"}</dd></div>
@@ -30,9 +45,9 @@ export function ToolDetailPanel({ tool, onPreview }: { tool: ToolViewModel; onPr
         <div className="matrix-row muted"><span>Windows · x64</span><strong>Review pending</strong><span>Detect only</span></div>
         <div className="matrix-row muted"><span>Linux · x64</span><strong>Mapping varies</strong><span>Unsupported fixture</span></div>
       </section>
+      </details>
       <footer className="detail-actions">
-        <button className="primary-button" type="button" disabled={!tool.primaryAction.enabled} aria-describedby={tool.primaryAction.disabledReasonCode ? actionReasonId : undefined} onClick={onPreview}>{tool.primaryAction.label}</button>
-        <button className="secondary-button" type="button"><AppIcon name="external" />Publisher Details</button>
+        <button className="primary-button" type="button" disabled={!tool.primaryAction.enabled} aria-describedby={tool.primaryAction.disabledReasonCode ? actionReasonId : undefined} onClick={onPreview}>{t(actionKey)}</button>
       </footer>
       <ActionDisabledReason id={actionReasonId} reasonCode={tool.primaryAction.disabledReasonCode} />
     </article>

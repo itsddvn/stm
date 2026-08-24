@@ -11,8 +11,10 @@ import { LoadingTable } from "../../components/loading-table";
 import { PageHeader } from "../../components/page-header";
 import { StateNotice } from "../../components/state-notice";
 import { useLifecycleOperation } from "../../components/use-lifecycle-operation";
+import { useI18n } from "../../lib/i18n";
 
 export function HistoryPage({ view }: { view: AppViewModel }) {
+  const { t } = useI18n();
   const [selectedId, setSelectedId] = useState(view.operations[0]?.id ?? "");
   const [dialogOperation, setDialogOperation] = useState<OperationViewModel | null>(null);
   const [sourceReanalysis, setSourceReanalysis] = useState<SourceKind | null>(null);
@@ -21,7 +23,7 @@ export function HistoryPage({ view }: { view: AppViewModel }) {
 
   return (
     <>
-      <PageHeader title="Operation History" description="Plans, owners, redacted outcomes, receipts, and scoped retry or recovery." />
+      <PageHeader title={t("page.history.title")} description={t("page.history.description")} />
       <StateNotice reasonCode={view.surface.reasonCode} />
       {view.surface.loadState === "loading" ? <LoadingTable /> : view.operations.length === 0 ? <EmptyState title="No operations recorded" detail="Lifecycle simulations and desktop adapter results will appear here." /> : (
         <div className="history-layout">

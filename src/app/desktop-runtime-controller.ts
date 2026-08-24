@@ -86,7 +86,7 @@ export function createDesktopRuntimeController({
     if (!button) return;
 
     const label = button.textContent?.replace(/\s+/g, " ").trim() ?? "";
-    if (label === "Refresh Fixture" || label === "Rescan Fixtures") {
+    if (button.dataset.runtimeAction === "refresh") {
       event.preventDefault();
       if (runtime.refreshInProgress && runtime.currentOperationId) {
         await client.cancelRefresh(runtime.currentOperationId);

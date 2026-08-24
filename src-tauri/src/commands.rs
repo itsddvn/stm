@@ -1,5 +1,22 @@
-use tauri::{AppHandle, Emitter, State};
-use tools_manager_core::{
+use std::{
+    fs::{self, OpenOptions},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+static PORTABLE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::Storage::FileSystem::ReplaceFileW;
+
+use stm_core::capabilities::{InstallProviderPreference, QuickSetupView};
+use stm_core::domain::migration::MigrationCandidate;
+use stm_core::domain::portable::PortableImportResult;
+use stm_core::domain::provider::{PreferenceSnapshot, ProviderKind};
+use stm_core::{
     application::{
         dto::{
             AppViewModelDto, McpServerViewModelDto, OperationViewModelDto, RefreshStatusDto,
@@ -16,6 +33,12 @@ use tools_manager_core::{
     },
     CoreError,
 };
+use stm_runtime::{
+    default_data_dir, detect_provider_inventory, download_and_verify_homebrew_pkg,
+    prepare_bun_binary,
+};
+use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::state::AppState;
 
@@ -112,18 +135,78 @@ pub fn prepare_lifecycle_plan(
     request: LifecyclePlanRequest,
     state: State<'_, AppState>,
 ) -> CommandResult<LifecyclePlan> {
+    let providers = detect_provider_inventory();
+    let requirements = state
+        .service()
+        .setup_queue_bootstrap_requirements(&request, &providers)
+        .map_err(render_error)?;
+    let requires_homebrew = requirements.contains(&ProviderKind::Homebrew);
+    let requires_bun = requirements.contains(&ProviderKind::Bun);
+    if requires_homebrew || requires_bun {
+        let homebrew = if requires_homebrew {
+            Some(
+                download_and_verify_homebrew_pkg(&default_data_dir().join("bootstrap"))
+                    .map_err(|error| error.to_string())?
+                    .into_core(),
+            )
+        } else {
+            None
+        };
+        let bun = if requires_bun {
+            let data_dir = default_data_dir();
+            Some(
+                prepare_bun_binary(&data_dir.join("bootstrap"), &data_dir.join("providers/bun"))
+                    .map_err(|error| error.to_string())?
+                    .into_core(),
+            )
+        } else {
+            None
+        };
+        return state
+            .service()
+            .prepare_lifecycle_with_provider_bootstraps(
+                request,
+                providers,
+                homebrew.as_ref(),
+                bun.as_ref(),
+            )
+            .map_err(render_error);
+    }
     state
         .service()
-        .prepare_lifecycle(request)
+        .prepare_lifecycle_with_providers(request, providers)
         .map_err(render_error)
 }
 
 #[tauri::command]
 pub fn start_lifecycle_operation(
+    app: AppHandle,
     plan_id: String,
     authorization: LifecycleConsentAuthorization,
+    locale: Option<String>,
     state: State<'_, AppState>,
 ) -> CommandResult<LifecycleExecutionResult> {
+    let locale = locale.unwrap_or_else(|| "vi".to_string());
+    let summary = state
+        .service()
+        .native_confirmation_summary(&plan_id, &locale)
+        .map_err(render_error)?;
+    let confirmed = app
+        .dialog()
+        .message(summary)
+        .title(if locale.starts_with("en") {
+            "Confirm STM changes"
+        } else {
+            "Xác nhận thay đổi của STM"
+        })
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancel)
+        .blocking_show();
+    if !confirmed {
+        return Err(render_error(CoreError::LifecycleConsentDenied(
+            "native confirmation denied".to_string(),
+        )));
+    }
     state
         .service()
         .start_lifecycle(&plan_id, authorization)
@@ -160,6 +243,198 @@ pub fn cancel_operation(operation_id: String, state: State<'_, AppState>) -> boo
 #[tauri::command]
 pub fn run_diagnostics(state: State<'_, AppState>) -> CommandResult<DiagnosticsReport> {
     state.service().diagnostics().map_err(render_error)
+}
+
+#[tauri::command]
+pub fn get_quick_setup(state: State<'_, AppState>) -> CommandResult<QuickSetupView> {
+    state
+        .service()
+        .quick_setup(detect_provider_inventory())
+        .map_err(render_error)
+}
+
+#[tauri::command]
+pub fn get_migration_candidates(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<MigrationCandidate>> {
+    state
+        .service()
+        .migration_candidates(&detect_provider_inventory())
+        .map_err(render_error)
+}
+#[tauri::command]
+pub fn set_provider_preference(
+    preference: InstallProviderPreference,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    state
+        .service()
+        .set_provider_preference(preference)
+        .map_err(render_error)
+}
+
+#[tauri::command]
+pub fn dismiss_quick_setup(state: State<'_, AppState>) -> CommandResult<()> {
+    state.service().dismiss_quick_setup().map_err(render_error)
+}
+
+#[tauri::command]
+pub fn get_setup_preferences(state: State<'_, AppState>) -> CommandResult<PreferenceSnapshot> {
+    Ok(state.service().setup_preferences())
+}
+#[tauri::command]
+pub fn validate_portable_setup(
+    bytes: String,
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<String>> {
+    state
+        .service()
+        .import_portable_bytes(bytes.as_bytes())
+        .map(|result| result.warnings)
+        .map_err(render_error)
+}
+
+#[tauri::command]
+pub fn import_portable_setup(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<Option<PortableImportResult>> {
+    let Some(selected) = app
+        .dialog()
+        .file()
+        .add_filter("STM setup", &["json"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    let path = selected.into_path().map_err(|error| error.to_string())?;
+    let file = OpenOptions::new()
+        .read(true)
+        .open(&path)
+        .map_err(|error| error.to_string())?;
+    let metadata = file.metadata().map_err(|error| error.to_string())?;
+    if !metadata.is_file() {
+        return Err("portable setup must be a regular file".to_string());
+    }
+    let mut bytes = Vec::with_capacity(
+        (metadata.len() as usize).min(stm_core::domain::portable::MAX_PORTABLE_BYTES + 1),
+    );
+    file.take((stm_core::domain::portable::MAX_PORTABLE_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    if bytes.len() > stm_core::domain::portable::MAX_PORTABLE_BYTES {
+        return Err("portable setup exceeds 64 KiB".to_string());
+    }
+    state
+        .service()
+        .import_portable_bytes(&bytes)
+        .map(Some)
+        .map_err(render_error)
+}
+
+#[tauri::command]
+pub fn export_portable_setup(
+    app: AppHandle,
+    target: String,
+    state: State<'_, AppState>,
+) -> CommandResult<Option<String>> {
+    let bytes = state
+        .service()
+        .export_portable_setup(&target)
+        .map_err(render_error)?;
+    let Some(selected) = app
+        .dialog()
+        .file()
+        .set_file_name(format!("stm-setup-{target}.json"))
+        .add_filter("STM setup", &["json"])
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = selected.into_path().map_err(|error| error.to_string())?;
+    atomic_write(&path, &bytes)?;
+    Ok(Some(
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("stm-setup.json")
+            .to_string(),
+    ))
+}
+
+fn atomic_write(path: &Path, bytes: &[u8]) -> CommandResult<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "export path has no parent".to_string())?;
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("stm-setup.json");
+    let (temp, mut file) = create_random_temp(parent, name)?;
+    let result = (|| -> CommandResult<()> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(fs::Permissions::from_mode(0o600))
+                .map_err(|error| error.to_string())?;
+        }
+        file.write_all(bytes).map_err(|error| error.to_string())?;
+        file.sync_all().map_err(|error| error.to_string())?;
+        replace_export_file(&temp, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
+fn create_random_temp(parent: &Path, name: &str) -> CommandResult<(PathBuf, fs::File)> {
+    for _ in 0..16 {
+        let sequence = PORTABLE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let temp = parent.join(format!(".{name}.stm-{}-{sequence}.tmp", std::process::id()));
+        match OpenOptions::new().create_new(true).write(true).open(&temp) {
+            Ok(file) => return Ok((temp, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Err("could not create a private export temporary file".to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_export_file(temp: &Path, path: &Path) -> CommandResult<()> {
+    fs::rename(temp, path).map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn replace_export_file(temp: &Path, path: &Path) -> CommandResult<()> {
+    if !path.exists() {
+        return fs::rename(temp, path).map_err(|error| error.to_string());
+    }
+    let destination = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replacement = temp
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replaced = unsafe {
+        ReplaceFileW(
+            destination.as_ptr(),
+            replacement.as_ptr(),
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if replaced == 0 {
+        Err(std::io::Error::last_os_error().to_string())
+    } else {
+        Ok(())
+    }
 }
 
 fn render_error(error: CoreError) -> String {

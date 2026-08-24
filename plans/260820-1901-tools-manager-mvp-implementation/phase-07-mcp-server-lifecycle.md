@@ -54,10 +54,10 @@ Credential fields contain reference metadata only, such as an environment-variab
 ## Related Code Files
 
 - Create: `/Users/itsddvn/projects/tools-managers/catalog/schemas/mcp-server.schema.json` and approved MCP mapping data
-- Create: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/mcp/` for discovery, normalization, planning, policy, health, receipts, and recovery
-- Create: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/adapters/mcp-clients/` for Codex, Claude Code, and AgentKit configuration adapters
+- Create: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/mcp/` for discovery, normalization, planning, policy, health, receipts, and recovery
+- Create: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/adapters/mcp-clients/` for Codex, Claude Code, and AgentKit configuration adapters
 - Create: `/Users/itsddvn/projects/tools-managers/tests/fixtures/mcp/` with redacted stdio, Streamable HTTP, conflict, partial-failure, and recovery fixtures
-- Modify: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/planning/`, `policy/`, `storage/`, and `operations/` to reuse shared immutable plan and receipt behavior
+- Modify: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/planning/`, `policy/`, `storage/`, and `operations/` to reuse shared immutable plan and receipt behavior
 - Modify: `/Users/itsddvn/projects/tools-managers/src/features/mcp/` only for approved real-data binding and verified defects
 - Modify: `/Users/itsddvn/projects/tools-managers/src-tauri/src/commands/` for scoped MCP inventory and lifecycle commands
 - Modify: `/Users/itsddvn/projects/tools-managers/.github/workflows/platform-contracts.yml` for client configuration and recovery tests

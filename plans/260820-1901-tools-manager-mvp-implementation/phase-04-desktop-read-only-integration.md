@@ -62,7 +62,7 @@ React feature modules remain presentation and local interaction only. Rust retur
 
 - Modify: `/Users/itsddvn/projects/tools-managers/src/lib/ipc/` to add the real Tauri adapter while retaining the fixture adapter
 - Modify: `/Users/itsddvn/projects/tools-managers/src/features/dashboard/`, `tools/`, `skills/`, `mcp/`, `updates/`, `history/`, `settings/` only for approved data binding and verified defect fixes
-- Modify: `/Users/itsddvn/projects/tools-managers/src-tauri/src/commands/` and `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/application/`
+- Modify: `/Users/itsddvn/projects/tools-managers/src-tauri/src/commands/` and `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/application/`
 - Create: `/Users/itsddvn/projects/tools-managers/e2e-tests/` for packaged read-only smoke and visual integration coverage
 - Modify: `/Users/itsddvn/projects/tools-managers/tests/fixtures/ui-contract/` only through the Phase 1 reopen/version-bump process
 - Modify: `/Users/itsddvn/projects/tools-managers/package.json`, `/Users/itsddvn/projects/tools-managers/vite.config.ts`, and quality workflows for desktop integration checks

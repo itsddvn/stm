@@ -1,10 +1,7 @@
 {
   "contractVersion": "1.1.0",
-  "status": "locked",
-  "approval": {
-    "approvedBy": "project-lead",
-    "approvedAt": "2026-08-21T04:21:07+07:00"
-  },
+  "status": "review",
+  "approval": null,
   "lockFile": "ui-contract.lock.json",
   "generatedAt": "2026-08-21T04:21:07+07:00",
   "artifacts": [
@@ -32,6 +29,7 @@
     "contracts/ui/design-token-contract.ts",
     "contracts/ui/interaction-contract.ts",
     "contracts/ui/lifecycle-contract.ts",
+    "contracts/ui/setup-contract.ts",
     "contracts/ui/route-contract.ts",
     "contracts/ui/state-contract.ts",
     "contracts/ui/ui-contract.manifest.json",
@@ -62,9 +60,11 @@
     "src/features/mcp/mcp-page.tsx",
     "src/features/history/history-page.tsx",
     "src/features/settings/settings-page.tsx",
+    "src/features/settings/migration-review-dialog.tsx",
     "src/features/skills/skill-detail-panel.tsx",
     "src/features/skills/skill-review-dialog.tsx",
     "src/features/skills/skills-page.tsx",
+    "src/features/setup/quick-setup-dialog.tsx",
     "src/features/tools/tool-detail-panel.tsx",
     "src/features/tools/tool-operation-dialog.tsx",
     "src/features/tools/tools-page.tsx",
@@ -79,6 +79,8 @@
     "src/fixtures/tool-fixtures.ts",
     "src/fixtures/source-analysis-fixtures.ts",
     "src/fixtures/update-fixtures.ts",
+    "src/fixtures/setup-fixtures.ts",
+    "src/fixtures/portable-validate.ts",
     "src/lib/copy.ts",
     "src/lib/ipc/mock-ipc-client.ts",
     "src/lib/ipc/runtime-ipc-client.ts",

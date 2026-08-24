@@ -1,6 +1,12 @@
 import type { ScenarioId } from "../../../contracts/ui/state-contract";
 import type { AppViewModel, SourceAnalysisViewModel, SourceKind } from "../../../contracts/ui/view-model-contract";
 import type { LifecycleConsentAuthorization, LifecycleExecutionResult, LifecyclePlan, LifecyclePlanRequest } from "../../../contracts/ui/lifecycle-contract";
+import type { InstallProviderPreference, MigrationCandidate, PortableImportResult, QuickSetupView } from "../../../contracts/ui/setup-contract";
+import type { ToolViewModel } from "../../../contracts/ui/view-model-contract";
+import { buildQuickSetupView, dismissQuickSetup, saveSetupPreference } from "../../fixtures/setup-fixtures";
+import { isQuickSetupDismissed } from "../../fixtures/setup-fixtures";
+import { validatePortableSetupText } from "../../fixtures/portable-validate";
+import { getCurrentLocale } from "../i18n";
 import { mockIpcClient, type ToolsManagerIpcClient } from "./mock-ipc-client";
 
 export interface RefreshStatus {
@@ -48,6 +54,14 @@ export interface RuntimeIpcClient extends ToolsManagerIpcClient {
   getRefreshStatus(): Promise<RefreshStatus>;
   cancelRefresh(operationId: string): Promise<boolean>;
   runDiagnostics(): Promise<DiagnosticsReport>;
+  getQuickSetup(tools: ToolViewModel[]): Promise<QuickSetupView>;
+  getSetupPreferences(): Promise<{ quickSetupDismissed: boolean }>;
+  validatePortableSetup(text: string): Promise<string[]>;
+  importPortableSetup(): Promise<PortableImportResult | null>;
+  exportPortableSetup(target: string): Promise<string | null>;
+  getMigrationCandidates(): Promise<MigrationCandidate[]>;
+  setProviderPreference(preference: InstallProviderPreference): Promise<void>;
+  dismissQuickSetup(): Promise<void>;
 }
 
 declare global {
@@ -160,6 +174,51 @@ class FixtureRuntimeClient implements RuntimeIpcClient {
     return mockIpcClient.cancelLifecycle(operationId);
   }
 
+  async getQuickSetup(tools: ToolViewModel[]) {
+    return buildQuickSetupView(tools);
+  }
+
+  async setProviderPreference(preference: InstallProviderPreference) {
+    saveSetupPreference(preference);
+  }
+
+  async dismissQuickSetup() {
+    dismissQuickSetup();
+  }
+
+  async getSetupPreferences() {
+    return { quickSetupDismissed: isQuickSetupDismissed() };
+  }
+
+  async validatePortableSetup(text: string) {
+    return validatePortableSetupText(text, "macos_arm64").warnings;
+  }
+
+  async importPortableSetup() {
+    return null;
+  }
+
+  async exportPortableSetup(_target: string) {
+    return null;
+  }
+
+
+  async getMigrationCandidates(): Promise<MigrationCandidate[]> {
+    return [{
+      recipe: {
+        id: "codex-npm-to-homebrew",
+        resourceId: "codex-cli",
+        sourceMappingId: "npm:@openai/codex",
+        targetMappingId: "homebrew:codex",
+        targetExecutablePaths: ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"],
+        sharedConfigIds: ["codex-home"],
+        cleanupOldOwnerDefault: true,
+      },
+      sourceOwner: "npm",
+      targetOwner: "Homebrew",
+      cleanupOldOwner: true,
+    }];
+  }
 }
 
 class TauriRuntimeClient implements RuntimeIpcClient {
@@ -197,7 +256,7 @@ class TauriRuntimeClient implements RuntimeIpcClient {
   }
 
   async startLifecycle(planId: string, authorization: LifecycleConsentAuthorization): Promise<LifecycleExecutionResult> {
-    return this.invoke<LifecycleExecutionResult>("start_lifecycle_operation", { planId, authorization });
+    return this.invoke<LifecycleExecutionResult>("start_lifecycle_operation", { planId, authorization, locale: getCurrentLocale() });
   }
 
   async getLifecycleStatus(operationId: string): Promise<LifecycleExecutionResult> {
@@ -207,6 +266,58 @@ class TauriRuntimeClient implements RuntimeIpcClient {
   async cancelLifecycle(operationId: string): Promise<LifecycleExecutionResult> {
     return this.invoke<LifecycleExecutionResult>("cancel_lifecycle_operation", { operationId });
   }
+
+  async getQuickSetup(_tools: ToolViewModel[]): Promise<QuickSetupView> {
+    const view = await this.invoke<{
+      target: string;
+      preference: InstallProviderPreference;
+      dismissed: boolean;
+      providers: { homebrew?: { path: string }; bun?: { path: string }; npm?: { path: string } };
+      tools: QuickSetupView["tools"];
+      optionalMcp: QuickSetupView["optional"];
+    }>("get_quick_setup");
+    return {
+      target: view.target,
+      preference: view.preference,
+      dismissed: view.dismissed,
+      providers: {
+        homebrew: view.providers.homebrew?.path,
+        bun: view.providers.bun?.path,
+        npm: view.providers.npm?.path,
+      },
+      tools: view.tools,
+      optional: view.optionalMcp,
+    };
+  }
+
+  async setProviderPreference(preference: InstallProviderPreference) {
+    await this.invoke("set_provider_preference", { preference });
+  }
+
+  async dismissQuickSetup() {
+    await this.invoke("dismiss_quick_setup");
+  }
+
+  async getSetupPreferences() {
+    return this.invoke<{ quickSetupDismissed: boolean }>("get_setup_preferences");
+  }
+
+  async validatePortableSetup(text: string) {
+    return this.invoke<string[]>("validate_portable_setup", { bytes: text });
+  }
+
+  async importPortableSetup() {
+    return this.invoke<PortableImportResult | null>("import_portable_setup");
+  }
+
+  async exportPortableSetup(target: string) {
+    return this.invoke<string | null>("export_portable_setup", { target });
+  }
+
+  async getMigrationCandidates() {
+    return this.invoke<MigrationCandidate[]>("get_migration_candidates");
+  }
+
 
   private invoke<T>(cmd: string, args: Record<string, unknown> = {}) {
     const invoke = window.__TAURI_INTERNALS__?.invoke;

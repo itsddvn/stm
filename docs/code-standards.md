@@ -18,8 +18,8 @@ Status: backend standards established in Phase 2 on 2026-08-20.
 
 ## Data contracts
 
-- Domain contracts live in `crates/tools-manager-core/src/domain/`.
-- UI-facing DTOs live in `crates/tools-manager-core/src/application/dto.rs`.
+- Domain contracts live in `crates/stm-core/src/domain/`.
+- UI-facing DTOs live in `crates/stm-core/src/application/dto.rs`.
 - JSON schemas under `catalog/schemas/` must describe the durable serialized contract, not transient implementation detail.
 - Keep Phase 2 schema filenames stable because CI and feasibility evidence refer to them directly.
 

@@ -10,8 +10,9 @@ const requiredArtifacts = [
   "catalog/schemas/skill-catalog.schema.json",
   "catalog/tools/recommended.json",
   "catalog/tools/candidates.json",
-  "crates/tools-manager-core/migrations/0001_initial.sql",
-  "crates/tools-manager-core/migrations/0002_read_only_snapshot.sql",
+  "crates/stm-runtime/migrations/0001_initial.sql",
+  "crates/stm-runtime/migrations/0002_read_only_snapshot.sql",
+  "crates/stm-runtime/migrations/0003_lifecycle_receipts.sql",
   "docs/code-standards.md",
   "docs/system-architecture.md",
   "src-tauri/capabilities/default.json",
@@ -63,8 +64,8 @@ const qualityWorkflow = readFile(".github/workflows/quality.yml");
 const readme = readFile("README.md");
 const architectureDoc = readFile("docs/system-architecture.md");
 
-if (recommended.tools?.length !== 10) {
-  errors.push(`recommended catalog must contain exactly 10 tools, found ${recommended.tools?.length ?? 0}`);
+if (!recommended.tools?.length) {
+  errors.push("recommended catalog must contain at least one tool");
 }
 
 if (!candidates.tools?.length) {
@@ -72,18 +73,7 @@ if (!candidates.tools?.length) {
 }
 
 const recommendedIds = new Set();
-const expectedRecommendedIds = [
-  "git",
-  "orca-ade",
-  "cmux-desktop",
-  "docker-desktop",
-  "orbstack",
-  "agentkit-cli",
-  "oh-my-pi",
-  "codex-cli",
-  "grok-build",
-  "cloudflared"
-];
+const requiredProfileIds = ["git", "agentkit-cli", "codex-cli", "cloudflared"];
 for (const tool of recommended.tools ?? []) {
   if (recommendedIds.has(tool.id)) {
     errors.push(`duplicate recommended tool id: ${tool.id}`);
@@ -93,11 +83,10 @@ for (const tool of recommended.tools ?? []) {
     errors.push(`recommended tool must stay recommended: ${tool.id}`);
   }
 }
-if (
-  expectedRecommendedIds.length !== recommendedIds.size ||
-  expectedRecommendedIds.some((id) => !recommendedIds.has(id))
-) {
-  errors.push(`recommended catalog ids drifted from the locked Phase 3 set: ${expectedRecommendedIds.join(", ")}`);
+for (const id of requiredProfileIds) {
+  if (!recommendedIds.has(id)) {
+    errors.push(`recommended catalog missing profile default: ${id}`);
+  }
 }
 
 const candidateIds = new Set((candidates.tools ?? []).map((tool) => tool.id));

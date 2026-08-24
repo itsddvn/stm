@@ -69,10 +69,10 @@ Catalog activation is all-or-nothing: validate the full bundled snapshot before 
 
 - Create: `/Users/itsddvn/projects/tools-managers/catalog/schemas/tool-catalog.schema.json`, `/Users/itsddvn/projects/tools-managers/catalog/schemas/skill-catalog.schema.json`
 - Create: `/Users/itsddvn/projects/tools-managers/catalog/tools/recommended.json`, `/Users/itsddvn/projects/tools-managers/catalog/tools/candidates.json`
-- Create: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/catalog/`, `inventory/`, `skills/`, `mcp/`, `storage/`, `versioning/`, `adapters/`
-- Create: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/migrations/`
+- Create: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/catalog/`, `inventory/`, `skills/`, `mcp/`, `storage/`, `versioning/`, `adapters/`
+- Create: `/Users/itsddvn/projects/tools-managers/crates/stm-core/migrations/`
 - Create: `/Users/itsddvn/projects/tools-managers/tests/fixtures/catalog/`, `managers/`, `tools/`, `skills/`, `mcp/`, `roots/`
-- Modify: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/application/` to emit locked UI view models and reason codes
+- Modify: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/application/` to emit locked UI view models and reason codes
 - Modify: `/Users/itsddvn/projects/tools-managers/src-tauri/src/commands/` to expose read-only commands/events matching UI Contract v1
 - Modify: `/Users/itsddvn/projects/tools-managers/.github/workflows/quality.yml` for schema, contract, and UI-lock suites
 

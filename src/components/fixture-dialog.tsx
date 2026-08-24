@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { AppIcon } from "./app-icon";
+import { useI18n } from "../lib/i18n";
 
 interface FixtureDialogProps {
   open: boolean;
@@ -11,6 +12,7 @@ interface FixtureDialogProps {
 }
 
 export function FixtureDialog({ open, title, description, onClose, children, footer }: FixtureDialogProps) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -27,7 +29,7 @@ export function FixtureDialog({ open, title, description, onClose, children, foo
           <h2 id="dialog-title">{title}</h2>
           <p id="dialog-description">{description}</p>
         </div>
-        <button className="icon-button" type="button" aria-label="Close dialog" onClick={onClose}><AppIcon name="close" /></button>
+        <button className="icon-button" type="button" aria-label={t("common.close")} onClick={onClose}><AppIcon name="close" /></button>
       </header>
       <div className="dialog-body">{children}</div>
       {footer ? <footer>{footer}</footer> : null}

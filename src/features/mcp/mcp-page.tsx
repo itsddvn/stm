@@ -9,6 +9,7 @@ import { SourceInstallDialog } from "../../components/source-install-dialog";
 import { StateNotice } from "../../components/state-notice";
 import { StatusBadge } from "../../components/status-badge";
 import { McpDetailPanel } from "./mcp-detail-panel";
+import { useI18n } from "../../lib/i18n";
 
 type McpDialogState =
   | { mode: "add" }
@@ -22,6 +23,7 @@ const addMcpAction = {
 } as const;
 
 export function McpPage({ view }: { view: AppViewModel }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [selectedId, setSelectedId] = useState(view.mcpServers[0]?.id ?? "");
@@ -49,9 +51,9 @@ export function McpPage({ view }: { view: AppViewModel }) {
   return (
     <>
       <PageHeader
-        title="MCP Servers"
-        description="Canonical servers, transports, global client bindings, capabilities, trust, and connection health."
-        actions={<><button className="secondary-button" type="button"><AppIcon name="refresh" />Rescan Fixtures</button><button className="primary-button" type="button" onClick={() => setDialog({ mode: "add" })}><AppIcon name="add" />Add MCP Server</button></>}
+        title={t("page.mcp.title")}
+        description={t("page.mcp.description")}
+        actions={<><button className="secondary-button" type="button" data-runtime-action="refresh"><AppIcon name="refresh" />{t("common.rescan")}</button><button className="primary-button" type="button" onClick={() => setDialog({ mode: "add" })}><AppIcon name="add" />{t("common.addMcp")}</button></>}
       />
       <StateNotice reasonCode={view.surface.reasonCode} />
       <SearchFilterBar label="MCP servers" query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} options={[{ value: "all", label: "All servers" }, { value: "stdio", label: "stdio" }, { value: "streamable_http", label: "Streamable HTTP" }, { value: "sse", label: "SSE" }, { value: "healthy", label: "Healthy" }, { value: "degraded", label: "Degraded" }]} />

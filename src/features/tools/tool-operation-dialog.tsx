@@ -6,11 +6,13 @@ import { FixtureDialog } from "../../components/fixture-dialog";
 import { LifecycleExecutionState } from "../../components/lifecycle-execution-state";
 import { LifecyclePlanReview } from "../../components/lifecycle-plan-review";
 import { useLifecycleOperation } from "../../components/use-lifecycle-operation";
+import { useI18n } from "../../lib/i18n";
 
 export function ToolOperationDialog({ tool, open, onClose }: { tool: ToolViewModel; open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
   const request = useMemo(() => ({
     resourceKind: "tool" as const,
-    action: tool.state === "missing" ? "install" : "update",
+    action: tool.state === "missing" ? "install" : tool.state === "managed_current" ? "inspect" : "update",
     resourceId: tool.id,
   }), [tool]);
   const lifecycle = useLifecycleOperation(request, open);
@@ -21,18 +23,19 @@ export function ToolOperationDialog({ tool, open, onClose }: { tool: ToolViewMod
     <FixtureDialog
       open={open}
       onClose={onClose}
-      title={guidanceOnly ? `${tool.name} Guidance` : `${tool.name} Lifecycle Review`}
-      description="Review the complete typed plan before the operation crosses an execution or vendor boundary."
+      title={tool.name}
+      description={t("setup.description")}
       footer={(
         <>
-          <button className="secondary-button" type="button" onClick={onClose}>{lifecycle.stage === "result" ? "Close" : "Cancel"}</button>
-          {lifecycle.stage === "review" && lifecycle.plan && !guidanceOnly && !actionBlocked ? <button className="primary-button" type="button" disabled={!lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}><AppIcon name="run" />Authorize &amp; Start</button> : null}
-          {lifecycle.stage === "progress" && lifecycle.result?.canCancel ? <button className="secondary-button" type="button" onClick={() => void lifecycle.cancel()}>Cancel Operation</button> : null}
-          {lifecycle.stage === "progress" ? <button className="primary-button" type="button" onClick={() => void lifecycle.refreshStatus()}>Refresh Status</button> : null}
+          <button className="secondary-button" type="button" onClick={onClose}>{t("common.close")}</button>
+          {lifecycle.stage === "review" && lifecycle.plan && !guidanceOnly && !actionBlocked ? <button className="primary-button" type="button" disabled={!lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}><AppIcon name="run" />{t("common.start")}</button> : null}
+          {lifecycle.stage === "progress" && lifecycle.result?.canCancel ? <button className="secondary-button" type="button" onClick={() => void lifecycle.cancel()}>{t("common.cancelOperation")}</button> : null}
+          {lifecycle.stage === "progress" ? <button className="primary-button" type="button" onClick={() => void lifecycle.refreshStatus()}>{t("common.refreshStatus")}</button> : null}
         </>
       )}
     >
-      {lifecycle.stage === "loading" ? <p className="dialog-loading">Preparing deterministic lifecycle evidence…</p> : null}
+      {lifecycle.stage === "loading" ? <p className="dialog-loading">{t("setup.preparing")}</p> : null}
+      {lifecycle.executionError ? <div className="warning-callout"><strong>{t("error.operation", { message: lifecycle.executionError })}</strong></div> : null}
       {lifecycle.stage === "review" && lifecycle.plan ? (
         <>
           {actionBlocked ? <ActionDisabledReason reasonCode={tool.primaryAction.disabledReasonCode} /> : null}

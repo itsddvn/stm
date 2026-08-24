@@ -6,7 +6,7 @@ Status: implemented and verified on macOS arm64 with Rust `1.88.0`.
 ## Delivered
 
 - Tauri 2 host scaffold in `src-tauri/` with explicit command permissions and no generic shell or filesystem webview capability.
-- Reusable `tools-manager-core` crate with serializable domain contracts, UI DTOs, ports, and feasibility modules.
+- Reusable `stm-core` crate with serializable domain contracts, UI DTOs, ports, and feasibility modules.
 - Allowlisted process supervision with array args, timeout, output bounding, and cancellation signal support.
 - Fixture-backed WinGet, Homebrew, and APT parser coverage.
 - Manager fixture matrix expanded to success, empty, malformed, manager-unavailable, timed-out, and version-variant cases for each supported manager family.
@@ -31,7 +31,7 @@ Status: implemented and verified on macOS arm64 with Rust `1.88.0`.
 - Manager fixtures: `tests/fixtures/feasibility/managers/**`
 - MCP fixtures: `tests/fixtures/feasibility/mcp/**`
 - Global skill fixtures: `tests/fixtures/feasibility/skills/**`
-- Core feasibility code: `crates/tools-manager-core/src/feasibility/**`
+- Core feasibility code: `crates/stm-core/src/feasibility/**`
 - Desktop host: `src-tauri/**`
 
 ## Verification

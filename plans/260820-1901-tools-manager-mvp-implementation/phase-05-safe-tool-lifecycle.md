@@ -72,8 +72,8 @@ Policy is deny-by-default. Catalog data selects mapping metadata; compiled adapt
 
 ## Related Code Files
 
-- Core lifecycle: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/lifecycle/`
-- Snapshot and DTO integration: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/application/service.rs`, `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/application/dto.rs`
+- Core lifecycle: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/lifecycle/`
+- Snapshot and DTO integration: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/application/service.rs`, `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/application/dto.rs`
 - Reviewed mappings: `/Users/itsddvn/projects/tools-managers/catalog/tools/recommended.json`
 - Desktop UI bindings: `/Users/itsddvn/projects/tools-managers/src/components/use-lifecycle-operation.ts`, `/Users/itsddvn/projects/tools-managers/src/features/tools/`, `/Users/itsddvn/projects/tools-managers/src/features/updates/`, `/Users/itsddvn/projects/tools-managers/src/features/history/`
 - Typed IPC and capabilities: `/Users/itsddvn/projects/tools-managers/src/lib/ipc/`, `/Users/itsddvn/projects/tools-managers/src-tauri/src/commands/`, `/Users/itsddvn/projects/tools-managers/src-tauri/capabilities/`

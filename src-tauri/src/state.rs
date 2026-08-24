@@ -5,15 +5,22 @@ use std::{
     time::Duration,
 };
 
-use tauri::{AppHandle, Emitter};
-use tools_manager_core::{
+use stm_core::{
+    adapters::FixtureWorkspace,
     application::{
         dto::{AppViewModelDto, RefreshStatusDto, SurfaceStateDto},
         events::{AppEvent, AppEventType},
         service::PhaseThreeApplicationService,
     },
     domain::inventory::{Freshness, LoadState},
+    lifecycle::LifecycleService,
+    ports::SnapshotStore,
 };
+use stm_runtime::{
+    default_data_dir, BoundedHttpsSourceProbe, JsonPreferencesStore, NativeProcessLiveness,
+    RealHostExecutableResolver, RealLifecycleExecutor, RealManagerEvidence, SqliteSnapshotStore,
+};
+use tauri::{AppHandle, Emitter};
 
 pub const REFRESH_EVENT_NAME: &str = "phase-three-scan";
 
@@ -43,11 +50,56 @@ struct RefreshRuntime {
 
 impl AppState {
     pub fn new(manifest_dir: &str) -> Self {
+        Self::build(manifest_dir, true, default_data_dir())
+    }
+
+    #[cfg(test)]
+    fn new_for_test(manifest_dir: &str) -> Self {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let data_dir =
+            std::env::temp_dir().join(format!("stm-state-test-{}-{nonce}", std::process::id()));
+        Self::build(manifest_dir, false, data_dir)
+    }
+
+    fn build(manifest_dir: &str, live_inventory: bool, data_dir: PathBuf) -> Self {
         let project_root = PathBuf::from(manifest_dir)
             .parent()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(manifest_dir));
-        let service = Arc::new(PhaseThreeApplicationService::new(project_root));
+        let workspace =
+            FixtureWorkspace::new(project_root.clone()).with_db_path(data_dir.join("stm.sqlite"));
+        let preferences = Arc::new(JsonPreferencesStore::new(data_dir));
+        let (sqlite, _) =
+            SqliteSnapshotStore::open(workspace.db_path()).expect("open STM snapshot store");
+        let storage: Arc<dyn SnapshotStore> = Arc::new(sqlite);
+        let host = Arc::new(RealHostExecutableResolver);
+        let lifecycle = LifecycleService::with_dependencies(
+            workspace,
+            Arc::new(RealLifecycleExecutor),
+            Arc::new(BoundedHttpsSourceProbe),
+            Arc::new(RealManagerEvidence::new(host.clone())),
+            host,
+            storage.clone(),
+            Arc::new(NativeProcessLiveness),
+        );
+        let service = Arc::new(if live_inventory {
+            PhaseThreeApplicationService::with_services(
+                project_root,
+                lifecycle,
+                storage,
+                preferences,
+            )
+        } else {
+            PhaseThreeApplicationService::with_fixture_services(
+                project_root,
+                lifecycle,
+                storage,
+                preferences,
+            )
+        });
 
         let mut refresh = RefreshRuntime::default();
         if let Ok(snapshot) = service.current_snapshot() {
@@ -307,7 +359,7 @@ mod tests {
 
     #[test]
     fn refresh_status_reaches_success_with_snapshot() {
-        let state = AppState::new(env!("CARGO_MANIFEST_DIR"));
+        let state = AppState::new_for_test(env!("CARGO_MANIFEST_DIR"));
 
         let initial = state.start_refresh_for_test();
         assert_eq!(initial.surface.load_state, LoadState::Loading);
@@ -323,7 +375,7 @@ mod tests {
 
     #[test]
     fn refresh_cancel_preserves_last_good_snapshot() {
-        let state = AppState::new(env!("CARGO_MANIFEST_DIR"));
+        let state = AppState::new_for_test(env!("CARGO_MANIFEST_DIR"));
 
         let _ = state.start_refresh_for_test();
         let operation_id = loop {

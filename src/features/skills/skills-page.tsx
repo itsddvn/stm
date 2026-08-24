@@ -10,8 +10,10 @@ import { StateNotice } from "../../components/state-notice";
 import { StatusBadge } from "../../components/status-badge";
 import { SkillDetailPanel } from "./skill-detail-panel";
 import { SkillReviewDialog } from "./skill-review-dialog";
+import { useI18n } from "../../lib/i18n";
 
 export function SkillsPage({ view }: { view: AppViewModel }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [selectedId, setSelectedId] = useState(view.skills[0]?.id ?? "");
@@ -22,7 +24,7 @@ export function SkillsPage({ view }: { view: AppViewModel }) {
 
   return (
     <>
-      <PageHeader title="Global Skills" description="Canonical skill identity, provenance, content state, and physical client targets." actions={<><button className="secondary-button" type="button"><AppIcon name="refresh" />Rescan Fixtures</button><button className="primary-button" type="button" onClick={() => setSourceDialogOpen(true)}><AppIcon name="link" />Install from Link</button></>} />
+      <PageHeader title={t("page.skills.title")} description={t("page.skills.description")} actions={<><button className="secondary-button" type="button" data-runtime-action="refresh"><AppIcon name="refresh" />{t("common.rescan")}</button><button className="primary-button" type="button" onClick={() => setSourceDialogOpen(true)}><AppIcon name="link" />{t("common.installLink")}</button></>} />
       <StateNotice reasonCode={view.surface.reasonCode} />
       <SearchFilterBar label="skills" query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} options={[{ value: "all", label: "All skill states" }, { value: "managed_current", label: "Current" }, { value: "managed_update_available", label: "Update available" }, { value: "modified", label: "Modified" }, { value: "conflict", label: "Conflict" }, { value: "external", label: "External" }]} />
       {view.surface.loadState === "loading" ? <LoadingTable /> : filtered.length === 0 ? <EmptyState title="No skills match" detail="Clear filters or choose another fixture scenario." /> : (

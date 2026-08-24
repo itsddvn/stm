@@ -35,7 +35,7 @@ Add the Tauri/Rust foundation behind the approved React interface, freeze backen
 
 - [x] Verify UI Contract v1 lock before work starts and continuously in CI.
 - [x] Add Tauri 2 to the existing Vite + React + TypeScript interface with pinned Node, pnpm, Rust, and Tauri versions.
-- [x] Create a Rust workspace with one reusable `tools-manager-core` library and a thin `src-tauri` host.
+- [x] Create a Rust workspace with one reusable `stm-core` library and a thin `src-tauri` host.
 - [x] Record canonical tool, mapping, ownership, inventory, operation, receipt, skill, MCP server, MCP client-binding, auth-reference, application-update, and source-analysis contracts that satisfy the approved UI view states.
 - [x] Define application-service commands/events matching the locked typed IPC client; the webview receives no shell or direct database capability.
 - [x] Prove allowlisted executable + argument-array supervision with timeout, output limit, cancellation, and structured result.
@@ -50,7 +50,7 @@ Add the Tauri/Rust foundation behind the approved React interface, freeze backen
 ```mermaid
 flowchart LR
     UI[Locked React UI] --> IPC[Tauri commands/events]
-    IPC --> CORE[tools-manager-core]
+    IPC --> CORE[stm-core]
     CORE --> CAT[Catalog contracts]
     CORE --> INV[Inventory contracts]
     CORE --> PLAN[Operation contracts]
@@ -69,7 +69,7 @@ Dependency direction is one-way: locked UI contract → typed UI client → Taur
 - Modify: `/Users/itsddvn/projects/tools-managers/package.json`, `/Users/itsddvn/projects/tools-managers/pnpm-lock.yaml`, `/Users/itsddvn/projects/tools-managers/tsconfig.json`, `/Users/itsddvn/projects/tools-managers/vite.config.ts`
 - Create: `/Users/itsddvn/projects/tools-managers/Cargo.toml`, `/Users/itsddvn/projects/tools-managers/rust-toolchain.toml`
 - Create: `/Users/itsddvn/projects/tools-managers/src-tauri/` for the Tauri host and deny-by-default capabilities
-- Create: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/` with `domain/`, `ports/`, and `application/` modules
+- Create: `/Users/itsddvn/projects/tools-managers/crates/stm-core/src/` with `domain/`, `ports/`, and `application/` modules
 - Create: `/Users/itsddvn/projects/tools-managers/catalog/schemas/` and `/Users/itsddvn/projects/tools-managers/tests/fixtures/feasibility/`
 - Modify: `/Users/itsddvn/projects/tools-managers/contracts/ui/` only through generated backend bindings and compatibility fixtures; locked source artifacts remain unchanged
 - Create: `/Users/itsddvn/projects/tools-managers/docs/system-architecture.md`, `/Users/itsddvn/projects/tools-managers/docs/code-standards.md`, `/Users/itsddvn/projects/tools-managers/README.md`
@@ -78,7 +78,7 @@ Dependency direction is one-way: locked UI contract → typed UI client → Taur
 ## Implementation Steps
 
 1. Verify the approved UI Contract v1 manifest, lockfile, fixture suite, interaction tests, and screenshot baselines before creating backend code.
-2. Add Tauri 2 around the existing React interface and configure the Rust workspace so `src-tauri` depends on `tools-manager-core`; forbid Tauri types inside the core crate.
+2. Add Tauri 2 around the existing React interface and configure the Rust workspace so `src-tauri` depends on `stm-core`; forbid Tauri types inside the core crate.
 3. Define serializable domain enums and value objects, including `CatalogStatus`, `MappingStatus`, `ExecutionMode`, `OwnershipKind`, `InventoryState`, and immutable `OperationPlan`; map them to the locked UI view-state schemas through explicit application DTOs.
 4. Define port traits for catalog source, inventory adapter, skill client, MCP client configuration, source analyzer, receipt repository, clock, process supervisor, elevation broker, and application updater.
 5. Define narrow Tauri commands for snapshot refresh, list/detail queries, plan generation, consent, execution, cancellation, and diagnostics; keep signatures compatible with the approved typed UI client and use deny-by-default capabilities.

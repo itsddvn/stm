@@ -1,0 +1,25 @@
+{
+  "version": "2026-08-22",
+  "profiles": [
+    {
+      "target": "macos_arm64",
+      "defaults": ["git", "agentkit-cli", "codex-cli", "cloudflared", "orbstack", "orca-ade", "cmux-desktop"],
+      "optional": ["oh-my-pi", "grok-build", "docker-desktop"]
+    },
+    {
+      "target": "macos_x64",
+      "defaults": ["git", "agentkit-cli", "codex-cli", "cloudflared", "orbstack", "orca-ade", "cmux-desktop"],
+      "optional": ["oh-my-pi", "grok-build", "docker-desktop"]
+    },
+    {
+      "target": "windows_x64",
+      "defaults": ["git", "agentkit-cli", "codex-cli", "cloudflared", "docker-desktop"],
+      "optional": ["oh-my-pi", "grok-build"]
+    },
+    {
+      "target": "linux_x64",
+      "defaults": ["git", "agentkit-cli", "codex-cli", "cloudflared"],
+      "optional": ["oh-my-pi", "grok-build"]
+    }
+  ]
+}

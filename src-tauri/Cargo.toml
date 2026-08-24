@@ -14,7 +14,12 @@ serde.workspace = true
 serde_json.workspace = true
 tauri.workspace = true
 tauri-plugin-single-instance.workspace = true
-tools-manager-core = { path = "../crates/tools-manager-core" }
+tauri-plugin-dialog.workspace = true
+stm-core = { path = "../crates/stm-core" }
+stm-runtime = { path = "../crates/stm-runtime" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
 
 [features]
 default = ["custom-protocol"]

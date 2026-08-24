@@ -14,7 +14,15 @@ commands.allow = [
   "list_updates",
   "list_operations",
   "analyze_source",
-  "run_diagnostics"
+  "run_diagnostics",
+  "get_quick_setup",
+  "get_migration_candidates",
+  "get_setup_preferences",
+  "validate_portable_setup",
+  "import_portable_setup",
+  "export_portable_setup",
+  "set_provider_preference",
+  "dismiss_quick_setup"
 ]
 
 [[permission]]

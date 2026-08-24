@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   LifecycleExecutionResult,
   LifecycleFollowUpAction,
@@ -14,6 +14,7 @@ interface LifecycleOperationState {
   plan: LifecyclePlan | null;
   result: LifecycleExecutionResult | null;
   stage: LifecycleStage;
+  prepareError: string | null;
 }
 
 interface ConsentState {
@@ -22,31 +23,41 @@ interface ConsentState {
 }
 
 export function useLifecycleOperation(request: LifecyclePlanRequest | null, open: boolean) {
-  const requestKey = useMemo(() => JSON.stringify(request), [request]);
+  const requestKey = JSON.stringify(request);
   const [operation, setOperation] = useState<LifecycleOperationState>({
     requestKey: "",
     plan: null,
     result: null,
     stage: "loading",
+    prepareError: null,
   });
+  const [retryNonce, setRetryNonce] = useState(0);
   const [consent, setConsent] = useState<ConsentState>({ evidenceKey: "", checked: false });
+  const [executionError, setExecutionError] = useState<string | null>(null);
   const current = operation.requestKey === requestKey
     ? operation
-    : { requestKey, plan: null, result: null, stage: "loading" as const };
-  const { plan, result, stage } = current;
+    : { requestKey, plan: null, result: null, stage: "loading" as const, prepareError: null };
+  const { plan, result, stage, prepareError } = current;
   const consentEvidenceKey = plan ? lifecycleConsentEvidenceKey(plan) : "";
   const consentEligible = plan ? isLifecycleConsentEligible(plan) : false;
   const consented = consentEligible && consent.evidenceKey === consentEvidenceKey && consent.checked;
 
   useEffect(() => {
-    if (!open || !request) return;
+    if (!open || !requestKey || requestKey === "null") return;
     let active = true;
-    void runtimeIpcClient.prepareLifecycle(request).then((nextPlan) => {
+    const nextRequest = JSON.parse(requestKey) as LifecyclePlanRequest;
+    void runtimeIpcClient.prepareLifecycle(nextRequest).then((nextPlan) => {
       if (!active) return;
-      setOperation({ requestKey, plan: nextPlan, result: null, stage: "review" });
+      setExecutionError(null);
+      setOperation({ requestKey, plan: nextPlan, result: null, stage: "review", prepareError: null });
+    }).catch((error: unknown) => {
+      if (!active) return;
+      setExecutionError(null);
+      const message = error instanceof Error ? error.message : String(error);
+      setOperation({ requestKey, plan: null, result: null, stage: "review", prepareError: message });
     });
     return () => { active = false; };
-  }, [open, request, requestKey]);
+  }, [open, requestKey, retryNonce]);
 
   function setConsented(checked: boolean) {
     setConsent({ evidenceKey: consentEvidenceKey, checked });
@@ -54,35 +65,70 @@ export function useLifecycleOperation(request: LifecyclePlanRequest | null, open
 
   async function start() {
     if (!plan || !consented || !isLifecycleConsentEligible(plan)) return;
-    const nextResult = await runtimeIpcClient.startLifecycle(plan.planId, {
-      planDigest: plan.digest,
-      planExpiresAt: plan.expiresAt,
-      grantedAt: new Date().toISOString(),
-    });
-    setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult) });
-    notifyLifecycleSettled(nextResult);
+    setExecutionError(null);
+    try {
+      const nextResult = await runtimeIpcClient.startLifecycle(plan.planId, {
+        planDigest: plan.digest,
+        planExpiresAt: plan.expiresAt,
+        grantedAt: new Date().toISOString(),
+      });
+      setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult), prepareError: null });
+      notifyLifecycleSettled(nextResult);
+    } catch (error) {
+      setExecutionError(error instanceof Error ? error.message : String(error));
+    }
   }
+
+  useEffect(() => {
+    const operationId = result?.operationId;
+    if (!open || stage !== "progress" || !operationId || !plan) return;
+    const timer = window.setInterval(() => {
+      void runtimeIpcClient.getLifecycleStatus(operationId).then((nextResult) => {
+        setExecutionError(null);
+        setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult), prepareError: null });
+        notifyLifecycleSettled(nextResult);
+      }).catch((error: unknown) => {
+        setExecutionError(error instanceof Error ? error.message : String(error));
+      });
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, [open, stage, result?.operationId, plan, requestKey]);
 
   async function refreshStatus() {
     if (!plan || !result) return;
-    const nextResult = await runtimeIpcClient.getLifecycleStatus(result.operationId);
-    setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult) });
-    notifyLifecycleSettled(nextResult);
+    try {
+      const nextResult = await runtimeIpcClient.getLifecycleStatus(result.operationId);
+      setExecutionError(null);
+      setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult), prepareError: null });
+      notifyLifecycleSettled(nextResult);
+    } catch (error) {
+      setExecutionError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function cancel() {
     if (!plan || !result) return;
-    const nextResult = await runtimeIpcClient.cancelLifecycle(result.operationId);
-    setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult) });
-    notifyLifecycleSettled(nextResult);
+    try {
+      const nextResult = await runtimeIpcClient.cancelLifecycle(result.operationId);
+      setExecutionError(null);
+      setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult), prepareError: null });
+      notifyLifecycleSettled(nextResult);
+    } catch (error) {
+      setExecutionError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function reviewFollowUp(action: LifecycleFollowUpAction) {
-    const nextPlan = await runtimeIpcClient.prepareLifecycle(action.planRequest);
-    setOperation({ requestKey, plan: nextPlan, result: null, stage: "review" });
+    try {
+      const nextPlan = await runtimeIpcClient.prepareLifecycle(action.planRequest);
+      setExecutionError(null);
+      setOperation({ requestKey, plan: nextPlan, result: null, stage: "review", prepareError: null });
+    } catch (error) {
+      setExecutionError(error instanceof Error ? error.message : String(error));
+    }
   }
 
-  return { plan, result, stage, consented, consentEligible, setConsented, start, refreshStatus, cancel, reviewFollowUp };
+  return { plan, result, stage, prepareError, executionError, consented, consentEligible, setConsented, start, refreshStatus, cancel, reviewFollowUp, retryPrepare: () => setRetryNonce((value) => value + 1) };
 }
 
 function notifyLifecycleSettled(result: LifecycleExecutionResult) {

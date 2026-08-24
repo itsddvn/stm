@@ -5,12 +5,22 @@ export type LifecyclePrivilege = "none" | "user_confirmation" | "elevation_requi
 export type LifecycleItemStatus = "pending" | "in_progress" | "success" | "failed" | "cancelled" | "skipped";
 export type LifecycleRevalidationState = "fresh" | "required" | "expired" | "evidence_changed";
 
+export interface LifecycleChildIntent {
+  resourceKind: LifecycleResourceKind;
+  resourceId: string;
+  desiredAction: string;
+  mappingId?: string;
+  dependsOn?: string[];
+}
+
 export interface LifecyclePlanRequest {
   resourceKind: LifecycleResourceKind;
   action: string;
   resourceId: string;
   sourceAnalysisHandle?: string;
   itemIds?: string[];
+  children?: LifecycleChildIntent[];
+  mappingId?: string;
 }
 
 interface LifecyclePlanBase<TRequest extends LifecyclePlanRequest = LifecyclePlanRequest> {
@@ -46,6 +56,33 @@ export interface ManagedLifecyclePlan<TRequest extends LifecyclePlanRequest = Li
   };
 }
 
+export interface NativeInstallerLifecyclePlan<TRequest extends LifecyclePlanRequest = LifecyclePlanRequest>
+  extends LifecyclePlanBase<TRequest> {
+  execution: {
+    mode: "native_installer";
+    executable: string;
+    argv: string[];
+    artifactSha256: string;
+    signerTeamId: string;
+    packageId: string;
+    expectedVersion: string;
+    previousReceiptInstallTime?: number;
+  };
+}
+
+export interface ArchiveInstallerLifecyclePlan<TRequest extends LifecyclePlanRequest = LifecyclePlanRequest>
+  extends LifecyclePlanBase<TRequest> {
+  execution: {
+    mode: "archive_installer";
+    executable: string;
+    argv: string[];
+    archiveSha256: string;
+    binarySha256: string;
+    targetPath: string;
+    expectedVersion: string;
+  };
+}
+
 export interface VendorHandoffLifecyclePlan<TRequest extends LifecyclePlanRequest = LifecyclePlanRequest>
   extends LifecyclePlanBase<TRequest> {
   execution: {
@@ -72,6 +109,8 @@ export interface BatchLifecyclePlan<TRequest extends LifecyclePlanRequest = Life
 
 export type AtomicLifecyclePlan<TRequest extends LifecyclePlanRequest = LifecyclePlanRequest> =
   | ManagedLifecyclePlan<TRequest>
+  | ArchiveInstallerLifecyclePlan<TRequest>
+  | NativeInstallerLifecyclePlan<TRequest>
   | VendorHandoffLifecyclePlan<TRequest>
   | ReviewOnlyLifecyclePlan<TRequest>;
 

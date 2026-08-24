@@ -15,7 +15,7 @@
     "verify:ui-contract": "node --import tsx scripts/verify-ui-contract.ts",
     "verify:phase-two-foundation": "node scripts/verify-phase-two-foundation.mjs",
     "verify:phase-three-core": "node scripts/verify-phase-three-core.mjs",
-    "verify:phase-four-desktop": "pnpm verify:ui-contract && pnpm typecheck && pnpm test && pnpm test:desktop-integration && cargo test -p tools-manager-core application::service && cargo test -p stm-desktop && pnpm tauri:build",
+    "verify:phase-four-desktop": "pnpm verify:ui-contract && pnpm typecheck && pnpm test && pnpm test:desktop-integration && cargo test -p stm-core application::service && cargo test -p stm-desktop && pnpm tauri:build",
     "lock:ui-contract": "node --import tsx scripts/verify-ui-contract.ts --write-lock"
   },
   "dependencies": {

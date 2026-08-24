@@ -49,6 +49,7 @@
                 "manager",
                 "packageId",
                 "adapter",
+                "step",
                 "mappingStatus",
                 "executionMode",
                 "ownershipKind",
@@ -60,12 +61,30 @@
                 "manager": { "type": "string" },
                 "packageId": { "type": "string" },
                 "adapter": { "type": "string" },
+                "step": {
+                  "type": "string",
+                  "enum": [
+                    "manager_package",
+                    "signed_artifact",
+                    "dmg_application",
+                    "pkg_installer",
+                    "windows_installer",
+                    "deb_package",
+                    "rpm_package",
+                    "archive_binary",
+                    "app_image",
+                    "vendor_handoff",
+                    "rescan",
+                    "verify_postcondition"
+                  ]
+                },
                 "mappingStatus": { "$ref": "inventory-contracts.schema.json#/$defs/mappingStatus" },
                 "executionMode": { "$ref": "inventory-contracts.schema.json#/$defs/executionMode" },
                 "ownershipKind": { "$ref": "inventory-contracts.schema.json#/$defs/ownershipKind" },
                 "privilege": { "$ref": "inventory-contracts.schema.json#/$defs/privilegeRequirement" },
                 "updateAuthority": { "type": "string" }
-              }
+              },
+              "additionalProperties": false
             }
           }
         }

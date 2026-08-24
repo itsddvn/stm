@@ -27,9 +27,10 @@ type UpdateActionOptions = {
 };
 
 export function buildToolPrimaryAction(tool: ToolActionSeed): ToolPresentationAction {
-  const installAction = tool.state === "missing" || !tool.installedVersion;
-  const baseActionId = installAction ? "tool.review_install" : "tool.review_managed_update";
-  const baseLabel = installAction ? "Preview Install" : "Preview Managed Update";
+  const installAction = tool.state === "missing";
+  const currentAction = tool.state === "managed_current";
+  const baseActionId = installAction ? "tool.review_install" : currentAction ? "tool.inspect_current" : "tool.review_managed_update";
+  const baseLabel = installAction ? "Preview Install" : currentAction ? "Installed" : "Preview Managed Update";
 
   if (tool.executionMode === "vendor_handoff") {
     return enabledToolAction("tool.review_vendor_handoff", "Review Handoff");

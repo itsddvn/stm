@@ -11,19 +11,23 @@ import { StateNotice } from "../../components/state-notice";
 import { StatusBadge } from "../../components/status-badge";
 import { ToolDetailPanel } from "./tool-detail-panel";
 import { ToolOperationDialog } from "./tool-operation-dialog";
+import { QuickSetupDialog } from "../setup/quick-setup-dialog";
+import { useI18n } from "../../lib/i18n";
 
 export function ToolsPage({ view }: { view: AppViewModel }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [selectedId, setSelectedId] = useState(view.tools[0]?.id ?? "");
   const [dialogTool, setDialogTool] = useState<ToolViewModel | null>(null);
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
+  const [quickSetupOpen, setQuickSetupOpen] = useState(false);
   const filtered = useMemo(() => view.tools.filter((tool) => (filter === "all" || tool.executionMode === filter) && `${tool.name} ${tool.groups.join(" ")}`.toLowerCase().includes(query.toLowerCase())), [filter, query, view.tools]);
   const selected = filtered.find((tool) => tool.id === selectedId) ?? filtered[0];
 
   return (
     <>
-      <PageHeader title="Tools Inventory" description="Canonical tools, detected ownership, and mapping-level lifecycle readiness." actions={<><button className="secondary-button" type="button"><AppIcon name="refresh" />Refresh Fixture</button><button className="primary-button" type="button" onClick={() => setSourceDialogOpen(true)}><AppIcon name="link" />Install from Link</button></>} />
+      <PageHeader title={t("page.tools.title")} description={t("page.tools.description")} actions={<><button className="secondary-button" type="button" onClick={() => setQuickSetupOpen(true)}>{t("common.quickSetup")}</button><button className="secondary-button" type="button" data-runtime-action="refresh"><AppIcon name="refresh" />{t("common.refresh")}</button><button className="primary-button" type="button" onClick={() => setSourceDialogOpen(true)}><AppIcon name="link" />{t("common.installLink")}</button></>} />
       <StateNotice reasonCode={view.surface.reasonCode} />
       <SearchFilterBar label="tools" query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter} options={[{ value: "all", label: "All execution modes" }, { value: "managed_execute", label: "Managed execute" }, { value: "vendor_handoff", label: "Vendor handoff" }, { value: "detect_only", label: "Detect only" }]} />
       {view.surface.loadState === "loading" ? <LoadingTable /> : filtered.length === 0 ? <EmptyState title="No tools match" detail="Clear filters or choose another fixture scenario." /> : (
@@ -36,6 +40,7 @@ export function ToolsPage({ view }: { view: AppViewModel }) {
       )}
       {dialogTool ? <ToolOperationDialog tool={dialogTool} open onClose={() => setDialogTool(null)} /> : null}
       {sourceDialogOpen ? <SourceInstallDialog kind="tool" open onClose={() => setSourceDialogOpen(false)} /> : null}
+      <QuickSetupDialog view={view} open={quickSetupOpen} onClose={() => setQuickSetupOpen(false)} />
     </>
   );
 }

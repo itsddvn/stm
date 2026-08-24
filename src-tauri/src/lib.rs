@@ -6,6 +6,7 @@ mod state;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -33,6 +34,14 @@ pub fn run() {
             commands::cancel_lifecycle_operation,
             commands::cancel_operation,
             commands::run_diagnostics,
+            commands::get_quick_setup,
+            commands::set_provider_preference,
+            commands::dismiss_quick_setup,
+            commands::get_migration_candidates,
+            commands::get_setup_preferences,
+            commands::validate_portable_setup,
+            commands::import_portable_setup,
+            commands::export_portable_setup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running STM");
