@@ -51,7 +51,7 @@ use crate::{
         ui_contract::{verify_locked_ui_contract, UiContractVerification},
     },
     lifecycle::LifecycleService,
-    ports::SnapshotStore,
+    ports::{LiveInventoryPort, SnapshotStore},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -93,6 +93,7 @@ pub struct PhaseThreeApplicationService {
     preferences: Arc<dyn PreferencesStore>,
     storage: Arc<dyn SnapshotStore>,
     live_inventory: bool,
+    live_inventory_reader: Option<Arc<dyn LiveInventoryPort>>,
 }
 
 impl PhaseThreeApplicationService {
@@ -101,6 +102,7 @@ impl PhaseThreeApplicationService {
         lifecycle: LifecycleService,
         storage: Arc<dyn SnapshotStore>,
         preferences: Arc<dyn PreferencesStore>,
+        live_inventory_reader: Arc<dyn LiveInventoryPort>,
     ) -> Self {
         Self {
             workspace: FixtureWorkspace::new(project_root),
@@ -108,6 +110,7 @@ impl PhaseThreeApplicationService {
             storage,
             preferences,
             live_inventory: true,
+            live_inventory_reader: Some(live_inventory_reader),
         }
     }
 
@@ -123,6 +126,7 @@ impl PhaseThreeApplicationService {
             storage,
             preferences,
             live_inventory: false,
+            live_inventory_reader: None,
         }
     }
 
@@ -138,6 +142,7 @@ impl PhaseThreeApplicationService {
             storage,
             preferences: Arc::new(crate::domain::provider::MemoryPreferencesStore::new()),
             live_inventory: false,
+            live_inventory_reader: None,
         }
     }
 
@@ -779,7 +784,9 @@ impl PhaseThreeApplicationService {
             "Validated catalog schemas and semantic invariants.",
         ));
         check_refresh_cancelled(is_cancelled, "catalog-validated")?;
-        let versions = if self.live_inventory {
+        let versions = if let Some(reader) = &self.live_inventory_reader {
+            reader.load_version_catalog(&self.workspace)?
+        } else if self.live_inventory {
             VersionCatalog::default()
         } else {
             load_version_catalog(&self.workspace)?
@@ -834,7 +841,9 @@ impl PhaseThreeApplicationService {
             "Completed manager inventory and allowlisted probe reconciliation.",
         ));
         check_refresh_cancelled(is_cancelled, "inventory-scanned")?;
-        let skills = if self.live_inventory {
+        let skills = if let Some(reader) = &self.live_inventory_reader {
+            reader.scan_skills(&self.workspace, &versions)?
+        } else if self.live_inventory {
             SkillInventorySnapshot {
                 skills: Vec::new(),
                 report: SkillScanReport {
@@ -852,7 +861,9 @@ impl PhaseThreeApplicationService {
             "Completed bounded global skill-root scan.",
         ));
         check_refresh_cancelled(is_cancelled, "skills-scanned")?;
-        let mcp = if self.live_inventory {
+        let mcp = if let Some(reader) = &self.live_inventory_reader {
+            reader.discover_mcp(&self.workspace)?
+        } else if self.live_inventory {
             McpInventorySnapshot {
                 servers: Vec::new(),
                 report: McpDiscoveryReport {
@@ -872,13 +883,10 @@ impl PhaseThreeApplicationService {
         check_refresh_cancelled(is_cancelled, "mcp-discovered")?;
         let (skill_records, mcp_servers, operations, errors, mut warnings) = if self.live_inventory
         {
-            (
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                live_warnings,
-            )
+            let errors = self.collect_scan_errors(&skills, &mcp);
+            let mut warnings = warnings_for_scan(&inventory, &skills, &mcp, &errors);
+            warnings.extend(live_warnings);
+            (skills.skills, mcp.servers, Vec::new(), errors, warnings)
         } else {
             let operations: Vec<OperationLogEntry> = self
                 .workspace
@@ -890,7 +898,11 @@ impl PhaseThreeApplicationService {
         let updates = build_application_updates(&inventory.tools, &skill_records, &versions);
 
         let mut snapshot = SnapshotBundle {
-            generated_at: "2026-08-20T09:00:00+07:00".to_string(),
+            generated_at: if self.live_inventory {
+                crate::lifecycle::time::format_timestamp(std::time::SystemTime::now())?
+            } else {
+                "2026-08-20T09:00:00+07:00".to_string()
+            },
             catalog_version: catalog.version.clone(),
             freshness: inventory.freshness.clone(),
             tools: inventory.tools,

@@ -13,12 +13,13 @@ use stm_core::{
         service::PhaseThreeApplicationService,
     },
     domain::inventory::{Freshness, LoadState},
-    lifecycle::LifecycleService,
+    lifecycle::{LifecycleService, LifecycleServiceDependencies},
     ports::SnapshotStore,
 };
 use stm_runtime::{
     default_data_dir, BoundedHttpsSourceProbe, JsonPreferencesStore, NativeProcessLiveness,
-    RealHostExecutableResolver, RealLifecycleExecutor, RealManagerEvidence, SqliteSnapshotStore,
+    RealHostExecutableResolver, RealLifecycleExecutor, RealManagerEvidence, RuntimeLiveInventory,
+    RuntimeMcpLifecycle, RuntimeSkillLifecycle, SqliteSnapshotStore,
 };
 use tauri::{AppHandle, Emitter};
 
@@ -49,10 +50,6 @@ struct RefreshRuntime {
 }
 
 impl AppState {
-    pub fn new(manifest_dir: &str) -> Self {
-        Self::build(manifest_dir, true, default_data_dir())
-    }
-
     #[cfg(test)]
     fn new_for_test(manifest_dir: &str) -> Self {
         let nonce = std::time::SystemTime::now()
@@ -69,21 +66,34 @@ impl AppState {
             .parent()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(manifest_dir));
+        let runtime_root = data_dir.clone();
         let workspace =
             FixtureWorkspace::new(project_root.clone()).with_db_path(data_dir.join("stm.sqlite"));
         let preferences = Arc::new(JsonPreferencesStore::new(data_dir));
         let (sqlite, _) =
             SqliteSnapshotStore::open(workspace.db_path()).expect("open STM snapshot store");
         let storage: Arc<dyn SnapshotStore> = Arc::new(sqlite);
+        let skill_home = workspace
+            .skill_home()
+            .expect("desktop runtime requires an available user home directory");
+        let database_path = workspace.db_path();
         let host = Arc::new(RealHostExecutableResolver);
         let lifecycle = LifecycleService::with_dependencies(
             workspace,
-            Arc::new(RealLifecycleExecutor),
-            Arc::new(BoundedHttpsSourceProbe),
-            Arc::new(RealManagerEvidence::new(host.clone())),
-            host,
-            storage.clone(),
-            Arc::new(NativeProcessLiveness),
+            LifecycleServiceDependencies {
+                executor: Arc::new(RealLifecycleExecutor),
+                source_probe: Arc::new(BoundedHttpsSourceProbe),
+                manager_evidence: Arc::new(RealManagerEvidence::new(host.clone())),
+                host,
+                storage: storage.clone(),
+                process_liveness: Arc::new(NativeProcessLiveness),
+                skill_lifecycle: Arc::new(RuntimeSkillLifecycle::new(
+                    database_path.clone(),
+                    runtime_root,
+                    skill_home.clone(),
+                )),
+                mcp_lifecycle: Arc::new(RuntimeMcpLifecycle::new(database_path, skill_home)),
+            },
         );
         let service = Arc::new(if live_inventory {
             PhaseThreeApplicationService::with_services(
@@ -91,6 +101,7 @@ impl AppState {
                 lifecycle,
                 storage,
                 preferences,
+                Arc::new(RuntimeLiveInventory),
             )
         } else {
             PhaseThreeApplicationService::with_fixture_services(
@@ -100,7 +111,14 @@ impl AppState {
                 preferences,
             )
         });
+        Self::with_service(service)
+    }
 
+    pub fn new_runtime(manifest_dir: &str) -> Self {
+        Self::build(manifest_dir, true, default_data_dir())
+    }
+
+    fn with_service(service: Arc<PhaseThreeApplicationService>) -> Self {
         let mut refresh = RefreshRuntime::default();
         if let Ok(snapshot) = service.current_snapshot() {
             refresh.last_snapshot = Some(snapshot.clone());
@@ -110,7 +128,6 @@ impl AppState {
             refresh.last_snapshot_at = status.last_snapshot_at;
             refresh.warnings = status.warnings;
         }
-
         Self {
             service,
             refresh: Arc::new(Mutex::new(refresh)),

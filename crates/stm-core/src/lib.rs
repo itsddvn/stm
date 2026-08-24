@@ -9,6 +9,8 @@ pub mod inventory;
 pub mod lifecycle;
 pub mod mcp;
 pub mod ports;
+pub mod skill_catalog;
+pub mod skill_lifecycle;
 pub mod skills;
 pub mod storage;
 pub mod versioning;

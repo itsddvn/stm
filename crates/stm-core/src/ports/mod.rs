@@ -1,10 +1,11 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
+    adapters::FixtureWorkspace,
     catalog::ToolCatalogMapping,
     domain::{
         lifecycle::{LifecycleConsentAuthorization, LifecycleExecutionResult},
-        mcp::McpDiscoveryReport,
+        mcp::{McpClientName, McpDiscoveryReport},
         operation::{ConsentRecord, OperationPlan, OperationReceipt},
         skill::SkillScanReport,
         source::{SourceAnalysisRecord, SourceKind},
@@ -16,7 +17,16 @@ use crate::{
         process_supervisor::{CancelSignal, ExecutionOutcome, ExecutionRequest},
     },
     lifecycle::{CompiledManagerCommand, ExecutableIdentity},
+    mcp::lifecycle::{McpBackupReceipt, McpMutationOutcome, PreparedMcpMutation},
+    mcp::McpInventorySnapshot,
+    skill_catalog::VerifiedSkillCatalog,
+    skill_lifecycle::{
+        ManagedSkillReceipt, PartialFailurePolicy, PreparedSkillMutation, SkillBackupReceipt,
+        SkillMutationOutcome, SkillSourceSpec, SkillStagingEvidence, SkillTargetOutcome,
+    },
+    skills::SkillInventorySnapshot,
     storage::{OperationLogEntry, SnapshotBundle, StorageHealth},
+    versioning::VersionCatalog,
 };
 
 pub trait CatalogSource {
@@ -64,6 +74,20 @@ pub trait ApplicationUpdater {
     fn current_channel(&self) -> Result<String, CoreError>;
 }
 
+pub trait LiveInventoryPort: Send + Sync {
+    fn load_version_catalog(
+        &self,
+        workspace: &FixtureWorkspace,
+    ) -> Result<VersionCatalog, CoreError>;
+    fn scan_skills(
+        &self,
+        workspace: &FixtureWorkspace,
+        versions: &VersionCatalog,
+    ) -> Result<SkillInventorySnapshot, CoreError>;
+    fn discover_mcp(&self, workspace: &FixtureWorkspace)
+        -> Result<McpInventorySnapshot, CoreError>;
+}
+
 pub trait SnapshotStore: Send + Sync {
     fn health(&self) -> StorageHealth;
     fn persist_snapshot(&self, snapshot: &SnapshotBundle) -> Result<(), CoreError>;
@@ -92,6 +116,61 @@ pub trait SnapshotStore: Send + Sync {
         child_process_id: u32,
     ) -> Result<(), CoreError>;
     fn load_lifecycle_receipts(&self) -> Result<Vec<OperationLogEntry>, CoreError>;
+}
+
+pub trait SkillLifecyclePort: Send + Sync {
+    fn load_authenticated_catalog(&self) -> Result<VerifiedSkillCatalog, CoreError>;
+    fn load_managed_receipts(
+        &self,
+        skill_id: &str,
+    ) -> Result<Vec<(String, ManagedSkillReceipt)>, CoreError>;
+    fn load_available_backups(&self, skill_id: &str) -> Result<Vec<SkillBackupReceipt>, CoreError>;
+    fn resolve(
+        &self,
+        source: &SkillSourceSpec,
+        cancel: &CancelSignal,
+    ) -> Result<SkillStagingEvidence, CoreError>;
+    fn cleanup(&self, evidence: &SkillStagingEvidence) -> Result<(), CoreError>;
+    fn materialize(
+        &self,
+        prepared: &PreparedSkillMutation,
+        partial_policy: PartialFailurePolicy,
+        recorded_at: &str,
+    ) -> Result<SkillMutationOutcome, CoreError>;
+    fn export_diff(
+        &self,
+        prepared: &PreparedSkillMutation,
+    ) -> Result<SkillMutationOutcome, CoreError>;
+    fn restore_backup(
+        &self,
+        backup_id: &str,
+        recorded_at: &str,
+    ) -> Result<SkillTargetOutcome, CoreError>;
+    fn recover_interrupted(&self, recorded_at: &str) -> Result<Vec<SkillTargetOutcome>, CoreError>;
+}
+
+pub trait McpLifecyclePort: Send + Sync {
+    fn client_config_path(&self, client: &McpClientName) -> PathBuf;
+    fn compile_stdio(
+        &self,
+        command: &str,
+        args: &[String],
+    ) -> Result<Option<CompiledManagerCommand>, CoreError>;
+    fn config_digest(&self, path: &std::path::Path) -> Result<Option<String>, CoreError>;
+    fn load_available_backups(&self, server_id: &str) -> Result<Vec<McpBackupReceipt>, CoreError>;
+    fn load_backup(&self, backup_id: &str) -> Result<Option<McpBackupReceipt>, CoreError>;
+    fn materialize(
+        &self,
+        prepared: &PreparedMcpMutation,
+        executable_identities: &[ExecutableIdentity],
+        recorded_at: &str,
+    ) -> Result<McpMutationOutcome, CoreError>;
+    fn restore_backup(
+        &self,
+        backup_id: &str,
+        recorded_at: &str,
+    ) -> Result<McpMutationOutcome, CoreError>;
+    fn recover_interrupted(&self, recorded_at: &str) -> Result<(), CoreError>;
 }
 
 pub trait SnapshotStoreFactory: Send + Sync {

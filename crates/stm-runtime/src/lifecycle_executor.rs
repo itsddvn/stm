@@ -6,10 +6,10 @@ use std::{
     sync::Arc,
 };
 
+use crate::process_supervisor::AllowlistedProcessSupervisor;
 use stm_core::{
     feasibility::process_supervisor::{
-        AllowedCommand, AllowlistedProcessSupervisor, ArgRule, CancelSignal, ExecutionRequest,
-        ExecutionStatus,
+        AllowedCommand, ArgRule, CancelSignal, ExecutionRequest, ExecutionStatus,
     },
     lifecycle::{
         command_environment, ExecutableIdentity, LifecycleExecutionPort, ManagedExecutionResult,

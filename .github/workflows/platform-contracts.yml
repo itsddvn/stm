@@ -46,6 +46,9 @@ jobs:
       - name: Run lifecycle runtime contracts
         run: cargo test -p stm-runtime
 
+      - name: Run MCP client configuration and recovery contracts
+        run: cargo test -p stm-runtime mcp
+
   disposable-homebrew-lifecycle:
     name: Disposable macOS manager lifecycles
     runs-on: macos-latest

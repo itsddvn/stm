@@ -83,6 +83,15 @@ export interface ArchiveInstallerLifecyclePlan<TRequest extends LifecyclePlanReq
   };
 }
 
+export interface ManagedConfigMutationLifecyclePlan<
+  TRequest extends LifecyclePlanRequest = LifecyclePlanRequest,
+> extends LifecyclePlanBase<TRequest> {
+  execution: {
+    mode: "managed_config_mutation";
+    action: string;
+  };
+}
+
 export interface VendorHandoffLifecyclePlan<TRequest extends LifecyclePlanRequest = LifecyclePlanRequest>
   extends LifecyclePlanBase<TRequest> {
   execution: {
@@ -111,6 +120,7 @@ export type AtomicLifecyclePlan<TRequest extends LifecyclePlanRequest = Lifecycl
   | ManagedLifecyclePlan<TRequest>
   | ArchiveInstallerLifecyclePlan<TRequest>
   | NativeInstallerLifecyclePlan<TRequest>
+  | ManagedConfigMutationLifecyclePlan<TRequest>
   | VendorHandoffLifecyclePlan<TRequest>
   | ReviewOnlyLifecyclePlan<TRequest>;
 

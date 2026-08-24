@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/itsddvn/stm-skill-catalog/main/schemas/skill-catalog-manifest.schema.json",
+  "title": "STM Skill Catalog Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "catalogVersion", "channel", "createdAt", "expiresAt", "payloadSha256", "payloadLength"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "catalogVersion": { "type": "integer", "minimum": 1 },
+    "channel": { "const": "stable" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "payloadSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "payloadLength": { "type": "integer", "minimum": 1, "maximum": 1048576 }
+  }
+}

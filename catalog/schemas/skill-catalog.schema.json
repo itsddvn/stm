@@ -1,25 +1,90 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/stm/skill-catalog.schema.json",
-  "title": "STM Skill Catalog Receipt",
+  "$id": "https://raw.githubusercontent.com/itsddvn/stm-skill-catalog/main/schemas/skill-catalog.schema.json",
+  "title": "STM Authenticated Skill Catalog",
   "type": "object",
-  "required": ["id", "name", "description", "source", "revision", "digest", "purposes", "targets"],
+  "additionalProperties": false,
+  "required": ["schemaVersion", "catalogVersion", "channel", "skills"],
   "properties": {
-    "id": { "type": "string" },
-    "name": { "type": "string" },
-    "description": { "type": "string" },
-    "source": { "type": "string" },
-    "revision": { "type": "string" },
-    "digest": { "type": "string" },
-    "purposes": { "type": "array", "items": { "type": "string" } },
-    "targets": {
+    "schemaVersion": { "const": 1 },
+    "catalogVersion": { "type": "integer", "minimum": 1 },
+    "channel": { "const": "stable" },
+    "skills": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["client", "relativePath"],
-        "properties": {
-          "client": { "enum": ["Codex", "Claude Code", "AgentKit"] },
-          "relativePath": { "type": "string" }
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/skill" }
+    }
+  },
+  "$defs": {
+    "safeSegment": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "safeRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "subpath", "commit", "treeSha256"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "maxLength": 300,
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\\.git$"
+        },
+        "subpath": { "$ref": "#/$defs/safeRelativePath" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "treeSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 over regular files sorted by relative UTF-8 path bytes; each record is uint32be(path byte length), path bytes, uint64be(content byte length), and exact content bytes."
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client", "relativePath"],
+      "properties": {
+        "client": { "enum": ["Codex", "Claude Code", "AgentKit"] },
+        "relativePath": { "$ref": "#/$defs/safeRelativePath" }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "publisher", "purposes", "riskFlags", "source", "targets"],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeSegment" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "publisher": { "$ref": "#/$defs/safeSegment" },
+        "purposes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeSegment" }
+        },
+        "riskFlags": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeSegment" }
+        },
+        "source": { "$ref": "#/$defs/source" },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/target" }
         }
       }
     }

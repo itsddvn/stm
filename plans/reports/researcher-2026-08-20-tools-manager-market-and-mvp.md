@@ -765,12 +765,12 @@ Skill detail shows catalog source, repository/subpath, commit/tag, optional decl
 | Tool and skill source intake | Paste HTTPS URL; analyze first; require review and fresh consent; never execute repository text | User decision 2026-08-20 |
 | MCP management | Persistent primary surface for inventory and reviewed configuration lifecycle | User decision 2026-08-20 |
 | MCP credential policy | Store credential references only; never store secret values in STM | User decision 2026-08-20 |
+| Trusted skill catalog | Public `itsddvn/stm-skill-catalog` metadata repository; project-lead reviewed snapshots; detached Ed25519 signatures over exact manifest bytes; compiled trust roots; monotonic expiry-bound versions; fixed HTTPS stable channel; bundled last-known-good fallback; app-release key rotation | Autonomous execution decision 2026-08-21 |
 
 ## 16. Unresolved questions
 
-1. Choose the trusted skill catalog publisher/review workflow and authenticated catalog-update mechanism before managed skill lifecycle implementation (implementation plan Phase 6).
-2. Resolve supported MCP client configuration schemas, trust policy, and credential-reference mechanism during Phase 2 before MCP lifecycle implementation (implementation plan Phase 7).
-3. Define supported OS versions and CPU architectures during foundation feasibility before release packaging (implementation plan Phase 8).
+1. Resolve supported MCP client configuration schemas, trust policy, and credential-reference mechanism during Phase 2 before MCP lifecycle implementation (implementation plan Phase 7).
+2. Define supported OS versions and CPU architectures during foundation feasibility before release packaging (implementation plan Phase 8).
 
 ---
 
@@ -788,3 +788,4 @@ Skill detail shows catalog source, repository/subpath, commit/tag, optional decl
 | 0.4.0 | 2026-08-20 | Codex | Resolve review findings: split canonical and mapping readiness, define lifecycle execution modes, deduplicate skill roots, bound elevation, separate product self-update, and restructure delivery into vertical slices. |
 | 0.4.1 | 2026-08-20 | Codex | Make delivery UI-first: Mobbin reference research, complete fixture-backed interface, project-lead verification, UI Contract v1 lock, and dependent-phase change control before backend logic. |
 | 0.5.0 | 2026-08-20 | Codex | Rename the product to STM; add reviewed tool and skill HTTPS source intake; make MCP Servers a persistent primary management area; preserve client ownership and credential-reference boundaries. |
+| 0.6.0 | 2026-08-21 | Codex | Resolve the trusted skill catalog gate: dedicated public publisher repository, project-lead review, exact-byte detached Ed25519 signatures, compiled trust roots, monotonic expiry-bound snapshots, fixed HTTPS updates, bundled fallback, and app-mediated key rotation. |

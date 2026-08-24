@@ -140,6 +140,7 @@ mod tests {
     }
 
 
+
     #[derive(Default)]
     struct FixtureManagerEvidence {
         inspections: AtomicUsize,
@@ -738,6 +739,56 @@ mod tests {
     }
 
     #[test]
+    fn recovery_blocker_clears_only_after_generic_skill_and_mcp_recovery_succeed() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace =
+            FixtureWorkspace::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
+                .with_db_path(temp.path().join("stm.sqlite"));
+        let store = test_support::TestSnapshotStore::shared(workspace.db_path());
+        let skill_lifecycle = Arc::new(test_support::TestSkillLifecycle::authenticated(1));
+        let mcp_lifecycle =
+            Arc::new(test_support::TestMcpLifecycle::with_recovery_failures(1));
+        let service = LifecycleService::with_dependencies(
+            workspace,
+            LifecycleServiceDependencies {
+                executor: Arc::new(SuccessfulExecutor::default()),
+                source_probe: Arc::new(FixtureProbe),
+                manager_evidence: Arc::new(AlwaysUpdateManagerEvidence),
+                host: Arc::new(test_support::TestHost),
+                storage: store.clone(),
+                process_liveness: Arc::new(test_support::TestProcessLiveness),
+                skill_lifecycle: skill_lifecycle.clone(),
+                mcp_lifecycle: mcp_lifecycle.clone(),
+            },
+        );
+        let review_request = LifecyclePlanRequest {
+            resource_kind: LifecycleResourceKind::Tool,
+            action: "review".to_string(),
+            resource_id: "com.docker.docker".to_string(),
+            source_analysis_handle: None,
+            item_ids: None,
+            children: Vec::new(),
+            mapping_id: None,
+        };
+
+        let error = service
+            .prepare(review_request.clone())
+            .expect_err("MCP recovery failure must keep startup blocked");
+        assert!(matches!(error, CoreError::LifecycleConsentDenied(_)));
+        let plan = service
+            .prepare(review_request)
+            .expect("all recovery boundaries succeeded on retry");
+
+        assert!(matches!(
+            plan.execution,
+            LifecycleExecution::DetectOnly { .. }
+        ));
+        assert_eq!(store.load_receipt_calls(), 3);
+        assert_eq!(skill_lifecycle.recovery_calls(), 3);
+        assert_eq!(mcp_lifecycle.recovery_calls(), 2);
+    }
+
+    #[test]
     #[cfg(target_os = "macos")]
     fn live_owner_evidence_selects_authoritative_provider_mapping() {
         let temp = TempDir::new().expect("tempdir");
@@ -952,6 +1003,71 @@ mod tests {
             restored_plan.execution,
             LifecycleExecution::Batch { .. }
         ));
+    }
+
+    #[test]
+    fn executable_skill_plan_revalidates_rotated_authenticated_catalog_before_mutation() {
+        let temp = TempDir::new().expect("tempdir");
+        let workspace =
+            FixtureWorkspace::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
+                .with_db_path(temp.path().join("stm.sqlite"));
+        let skill_lifecycle = Arc::new(test_support::TestSkillLifecycle::authenticated(0));
+        let service = LifecycleService::with_dependencies(
+            workspace.clone(),
+            LifecycleServiceDependencies {
+                executor: Arc::new(SuccessfulExecutor::default()),
+                source_probe: Arc::new(FixtureProbe),
+                manager_evidence: Arc::new(AlwaysUpdateManagerEvidence),
+                host: Arc::new(test_support::TestHost),
+                storage: test_support::TestSnapshotStore::shared(workspace.db_path()),
+                process_liveness: Arc::new(test_support::TestProcessLiveness),
+                skill_lifecycle: skill_lifecycle.clone(),
+                mcp_lifecycle: Arc::new(test_support::TestMcpLifecycle::default()),
+            },
+        );
+        let plan = service
+            .prepare(LifecyclePlanRequest {
+                resource_kind: LifecycleResourceKind::Skill,
+                action: "install".to_string(),
+                resource_id: "frontend-design".to_string(),
+                source_analysis_handle: None,
+                item_ids: None,
+                children: Vec::new(),
+                mapping_id: None,
+            })
+            .expect("authenticated executable Skill plan");
+        assert!(matches!(
+            plan.execution,
+            LifecycleExecution::DetectOnly { .. }
+        ));
+        let prepared = service
+            .state
+            .lock()
+            .expect("lifecycle state")
+            .plans
+            .get(&plan.plan_id)
+            .expect("stored Skill plan")
+            .prepared
+            .clone();
+        service
+            .revalidate(&prepared)
+            .expect("matching Skill evidence revalidates");
+        assert_eq!(skill_lifecycle.cleanup_calls(), 1);
+
+
+        skill_lifecycle.rotate_catalog_trust();
+        let initial = service
+            .start(&plan.plan_id, authorize(&plan))
+            .expect("start accepted immutable plan");
+        let result = wait_for_completion(&service, &initial.operation_id);
+
+        assert_eq!(result.status, LifecycleExecutionStatus::Failed);
+        assert!(result
+            .redacted_detail
+            .contains("Revalidation failed before execution"));
+        assert_eq!(skill_lifecycle.catalog_loads(), 3);
+        assert_eq!(skill_lifecycle.cleanup_calls(), 3);
+        assert_eq!(skill_lifecycle.materialize_calls(), 0);
     }
 
     #[test]

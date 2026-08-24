@@ -1,3 +1,5 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { routes } from "../../contracts/ui/route-contract";
 import { scenarioIds } from "../../contracts/ui/state-contract";
@@ -5,6 +7,7 @@ import type { AppViewModel } from "../../contracts/ui/view-model-contract";
 import matrix from "../../tests/fixtures/ui-contract/scenario-matrix.json";
 import { activateSkipLink } from "../app/app-shell";
 import { isLifecycleConsentEligible, lifecycleConsentEvidenceKey, lifecycleStageForResult } from "../components/use-lifecycle-operation";
+import { SourceInstallDialog } from "../components/source-install-dialog";
 import { buildLifecycleExecution, buildLifecyclePlan } from "../fixtures/lifecycle-fixtures";
 import { buildScenarioFixture } from "../fixtures/scenario-fixtures";
 import { sourceReanalysisKind } from "../features/history/history-page";
@@ -16,7 +19,7 @@ import { buildQuickSetupView } from "../fixtures/setup-fixtures";
 import { toolFixtures } from "../fixtures/tool-fixtures";
 import { assertPortableExportSafe, validatePortableSetupText } from "../fixtures/portable-validate";
 import { mockIpcClient } from "../lib/ipc/mock-ipc-client";
-import { englishMessages, resolveLocale, vietnameseMessages } from "../lib/i18n";
+import { englishMessages, I18nProvider, resolveLocale, vietnameseMessages, type MessageKey } from "../lib/i18n";
 
 function authorize(plan: { digest: string; expiresAt: string }) {
   return {
@@ -26,12 +29,98 @@ function authorize(plan: { digest: string; expiresAt: string }) {
   };
 }
 
+const directMcpLifecycleKeys = [
+  "source.mcp.direct.title",
+  "source.mcp.direct.description",
+  "source.mcp.direct.configure.title",
+  "source.mcp.direct.configure.description",
+  "source.mcp.direct.configure.start",
+  "source.mcp.direct.enable.title",
+  "source.mcp.direct.enable.description",
+  "source.mcp.direct.enable.start",
+  "source.mcp.direct.disable.title",
+  "source.mcp.direct.disable.description",
+  "source.mcp.direct.disable.start",
+  "source.mcp.direct.remove.title",
+  "source.mcp.direct.remove.description",
+  "source.mcp.direct.remove.start",
+  "source.authorizeStart",
+  "source.lifecycle.prepareFailed",
+  "source.lifecycle.preparing",
+  "common.close",
+  "common.cancelOperation",
+  "common.refreshStatus",
+  "setup.retry",
+  "result.progress",
+  "result.success",
+  "result.partial",
+  "result.failed",
+  "result.cancelled",
+  "result.recoverable",
+  "result.summary",
+  "result.advanced",
+  "error.operation",
+] as const satisfies readonly MessageKey[];
+
+function renderDirectMcpDialog(locale: "vi" | "en", action: "configure" | "enable" | "disable" | "remove") {
+  const originalWindow = globalThis.window;
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: { getItem: () => locale } },
+  });
+  try {
+    return renderToStaticMarkup(createElement(
+      I18nProvider,
+      null,
+      createElement(SourceInstallDialog, {
+        kind: "mcp",
+        open: true,
+        onClose: () => undefined,
+        title: "Hard-coded caller title",
+        directRequest: { resourceKind: "mcp", action, resourceId: "github" },
+      }),
+    ));
+  } finally {
+    if (originalWindow === undefined) {
+      Reflect.deleteProperty(globalThis, "window");
+    } else {
+      Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+    }
+  }
+}
+
 describe("fixture-backed UI contract", () => {
-  it("defaults to Vietnamese and keeps both locale catalogs complete", () => {
+  it("defaults unknown locales to Vietnamese and keeps direct MCP lifecycle copy complete", () => {
     expect(resolveLocale(null)).toBe("vi");
     expect(resolveLocale("vi")).toBe("vi");
     expect(resolveLocale("en")).toBe("en");
+    expect(resolveLocale("unsupported")).toBe("vi");
     expect(Object.keys(englishMessages).sort()).toEqual(Object.keys(vietnameseMessages).sort());
+    for (const key of directMcpLifecycleKeys) {
+      expect(vietnameseMessages[key].trim()).not.toBe("");
+      expect(englishMessages[key].trim()).not.toBe("");
+    }
+  });
+
+  it("renders direct MCP lifecycle loading copy from the persisted locale catalog", () => {
+    const actions = ["configure", "enable", "disable", "remove"] as const;
+    for (const action of actions) {
+      const viMarkup = renderDirectMcpDialog("vi", action);
+      expect(viMarkup).toContain(vietnameseMessages[`source.mcp.direct.${action}.title`]);
+      expect(viMarkup).toContain(vietnameseMessages[`source.mcp.direct.${action}.description`]);
+      expect(viMarkup).toContain(vietnameseMessages["source.lifecycle.preparing"]);
+      expect(viMarkup).toContain(`aria-label="${vietnameseMessages["common.close"]}"`);
+      expect(viMarkup).not.toContain("Hard-coded caller title");
+      expect(viMarkup).not.toContain("Review digest-bound");
+      expect(viMarkup).not.toContain("Preparing digest-bound");
+
+      const enMarkup = renderDirectMcpDialog("en", action);
+      expect(enMarkup).toContain(englishMessages[`source.mcp.direct.${action}.title`]);
+      expect(enMarkup).toContain(englishMessages[`source.mcp.direct.${action}.description`]);
+      expect(enMarkup).toContain(englishMessages["source.lifecycle.preparing"]);
+      expect(enMarkup).toContain(`aria-label="${englishMessages["common.close"]}"`);
+      expect(enMarkup).not.toContain("Hard-coded caller title");
+    }
   });
   it("has one deterministic fixture for every scenario", () => {
     expect(matrix.contractVersion).toBe("1.1.0-review");
@@ -405,7 +494,7 @@ describe("fixture-backed UI contract", () => {
     expect(() => assertPortableExportSafe(JSON.stringify({
       schemaVersion: 1,
       target: "macos_arm64",
-      resources: [{ kind: "mcp", id: "x", desiredAction: "add", token: "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }],
+      resources: [{ kind: "mcp", id: "x", desiredAction: "add", token: `ghp_${"a".repeat(36)}` }],
     }))).toThrow(/secret-shaped/);
   });
 });

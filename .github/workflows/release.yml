@@ -1,0 +1,361 @@
+name: Signed Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag to build as a draft release
+        required: true
+        type: string
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  security-events: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  RELEASE_REF: ${{ inputs.tag || github.ref }}
+
+jobs:
+  release-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+      - name: Verify exact release tag checkout
+        shell: bash
+        run: |
+          case "$RELEASE_TAG" in v*) ;; *) exit 1 ;; esac
+          test "$(git cat-file -t "$RELEASE_TAG")" = "tag"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:release-version "$RELEASE_TAG"
+      - name: Reject an already published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = "true"
+          fi
+      - run: pnpm verify:release-contract
+      - run: pnpm verify:release-tooling
+      - run: pnpm verify:ui-contract
+
+  release-quality-security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+      - name: Verify exact release tag checkout
+        run: test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.13.1
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - name: Install desktop and audit dependencies
+        run: sudo apt-get update && sudo apt-get install --yes libappindicator3-dev librsvg2-dev libwebkit2gtk-4.1-dev patchelf
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:desktop-integration
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - run: pnpm audit --prod --audit-level high
+      - run: cargo install cargo-audit --locked --version 0.21.2
+      - run: cargo audit
+      - run: pnpm verify:no-secrets
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: stm-source.spdx.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: stm-source-sbom-${{ env.RELEASE_TAG }}
+          path: stm-source.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+  release-codeql:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+      - name: Verify exact release tag checkout
+        run: test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+
+  build:
+    needs: [release-contract, release-quality-security, release-codeql]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+    runs-on: ${{ matrix.os }}
+    environment: signed-release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+      - name: Verify exact release tag checkout before secrets
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.13.1
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux bundler dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes libappindicator3-dev librsvg2-dev libwebkit2gtk-4.1-dev patchelf
+      - run: pnpm install --frozen-lockfile
+      - name: Require updater signing credentials
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY"
+          test -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+          test -n "$TAURI_UPDATER_PUBLIC_KEY"
+      - name: Require Apple signing and notarization credentials
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          test -n "$APPLE_CERTIFICATE"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          test -n "$APPLE_SIGNING_IDENTITY"
+          test -n "$APPLE_ID"
+          test -n "$APPLE_PASSWORD"
+          test -n "$APPLE_TEAM_ID"
+      - name: Import Windows signing certificate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE -or -not $env:WINDOWS_CERTIFICATE_PASSWORD -or -not $env:WINDOWS_CERTIFICATE_THUMBPRINT) { throw "Windows signing credentials are incomplete" }
+          $certificatePath = Join-Path $env:RUNNER_TEMP "stm-release.pfx"
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password | Out-Null
+      - name: Verify injected updater public key
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: cargo run --locked -p stm-release-verifier -- --check-key
+      - name: Generate release-only Tauri configuration
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        run: pnpm release:config target/release-config/tauri.release.generated.json
+      - name: Build and upload signed Apple draft artifacts
+        if: runner.os == 'macOS'
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: STM ${{ env.RELEASE_TAG }}
+          releaseBody: Signed draft release candidate. Promote only after aggregate updater, artifact, and fresh-machine smoke verification.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config target/release-config/tauri.release.generated.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Build and upload signed Windows draft artifacts
+        if: runner.os == 'Windows'
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: STM ${{ env.RELEASE_TAG }}
+          releaseBody: Signed draft release candidate. Promote only after aggregate updater, artifact, and fresh-machine smoke verification.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config target/release-config/tauri.release.generated.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Build and upload signed Linux draft artifacts
+        if: runner.os == 'Linux'
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: STM ${{ env.RELEASE_TAG }}
+          releaseBody: Signed draft release candidate. Promote only after aggregate updater, artifact, and fresh-machine smoke verification.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config target/release-config/tauri.release.generated.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Sign every native installer envelope
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          while IFS= read -r -d '' installer; do
+            pnpm tauri signer sign "$installer"
+          done < <(find "target/${{ matrix.target }}/release/bundle" -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' \) -print0)
+      - name: Upload native installer signatures
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          while IFS= read -r -d '' signature; do
+            gh release upload "$RELEASE_TAG" "$signature" --clobber
+          done < <(find "target/${{ matrix.target }}/release/bundle" -type f \( -name '*.dmg.sig' -o -name '*.msi.sig' -o -name '*.exe.sig' -o -name '*.AppImage.sig' -o -name '*.deb.sig' \) -print0)
+      - name: Verify Apple code signing
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app_path="$(find "target/${{ matrix.target }}/release/bundle" -type d -name '*.app' -print -quit)"
+          test -n "$app_path"
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          spctl --assess --type execute --verbose=2 "$app_path"
+      - name: Verify Windows Authenticode
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem "target/${{ matrix.target }}/release/bundle" -Recurse -File | Where-Object { $_.Extension -in '.msi', '.exe' }
+          if (-not $installers) { throw "No Windows installer found" }
+          foreach ($installer in $installers) {
+            if ((Get-AuthenticodeSignature $installer.FullName).Status -ne 'Valid') { throw "Invalid Authenticode signature: $($installer.Name)" }
+          }
+      - name: Verify local signed artifacts and checksums
+        shell: bash
+        run: pnpm verify:release-artifacts "target/${{ matrix.target }}/release/bundle" "$RELEASE_TAG"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: target/${{ matrix.target }}/release/bundle/**/*
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: stm-${{ matrix.target }}-${{ env.RELEASE_TAG }}
+          path: target/${{ matrix.target }}/release/bundle/**
+          if-no-files-found: error
+          retention-days: 30
+
+  aggregate-updater:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: signed-release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Download actual draft release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$RELEASE_TAG" --dir draft-assets --clobber
+      - name: Sign the exact aggregate updater manifest
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri signer sign draft-assets/latest.json
+      - name: Upload signed manifest envelope
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$RELEASE_TAG" draft-assets/latest.json.sig --clobber
+      - name: Verify aggregate manifest entries and signatures
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: cargo run --locked -p stm-release-verifier -- draft-assets draft-assets/latest.json darwin-aarch64 darwin-x86_64 windows-x86_64 linux-x86_64
+      - run: pnpm verify:release-artifacts draft-assets "$RELEASE_TAG" draft-assets/latest.json draft-assets/release-checksums.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: stm-aggregate-updater-${{ env.RELEASE_TAG }}
+          path: |
+            draft-assets/latest.json
+            draft-assets/latest.json.sig
+            draft-assets/release-checksums.json
+          if-no-files-found: error
+          retention-days: 30
+
+  release-gate:
+    needs: aggregate-updater
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "Signed draft artifacts and aggregate updater manifest passed automation. Manual fresh-machine smoke and draft promotion remain required."

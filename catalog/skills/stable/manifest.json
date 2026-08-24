@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": 1,
+  "channel": "stable",
+  "createdAt": "2026-08-21T03:07:25Z",
+  "expiresAt": "2027-02-17T03:07:25Z",
+  "payloadSha256": "df63c0bb527a51861b6a4582ad7c3c1bea873de946ba04432631f7e00241764f",
+  "payloadLength": 1027
+}

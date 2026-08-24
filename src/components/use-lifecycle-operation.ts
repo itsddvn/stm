@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   LifecycleExecutionResult,
   LifecycleFollowUpAction,
@@ -34,6 +34,8 @@ export function useLifecycleOperation(request: LifecyclePlanRequest | null, open
   const [retryNonce, setRetryNonce] = useState(0);
   const [consent, setConsent] = useState<ConsentState>({ evidenceKey: "", checked: false });
   const [executionError, setExecutionError] = useState<string | null>(null);
+  const startingRef = useRef(false);
+  const [starting, setStarting] = useState(false);
   const current = operation.requestKey === requestKey
     ? operation
     : { requestKey, plan: null, result: null, stage: "loading" as const, prepareError: null };
@@ -64,7 +66,14 @@ export function useLifecycleOperation(request: LifecyclePlanRequest | null, open
   }
 
   async function start() {
-    if (!plan || !consented || !isLifecycleConsentEligible(plan)) return;
+    if (
+      startingRef.current
+      || !plan
+      || !consented
+      || !isLifecycleConsentEligible(plan)
+    ) return;
+    startingRef.current = true;
+    setStarting(true);
     setExecutionError(null);
     try {
       const nextResult = await runtimeIpcClient.startLifecycle(plan.planId, {
@@ -76,6 +85,9 @@ export function useLifecycleOperation(request: LifecyclePlanRequest | null, open
       notifyLifecycleSettled(nextResult);
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
     }
   }
 
@@ -128,7 +140,7 @@ export function useLifecycleOperation(request: LifecyclePlanRequest | null, open
     }
   }
 
-  return { plan, result, stage, prepareError, executionError, consented, consentEligible, setConsented, start, refreshStatus, cancel, reviewFollowUp, retryPrepare: () => setRetryNonce((value) => value + 1) };
+  return { plan, result, stage, starting, prepareError, executionError, consented, consentEligible, setConsented, start, refreshStatus, cancel, reviewFollowUp, retryPrepare: () => setRetryNonce((value) => value + 1) };
 }
 
 function notifyLifecycleSettled(result: LifecycleExecutionResult) {

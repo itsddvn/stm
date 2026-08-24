@@ -10,8 +10,8 @@ tokenAlias = "github-access-token"
 capabilities = ["tools", "prompts"]
 
 [mcp_servers.postgres]
-url = "https://mcp.example.com/postgres?access_token=secret"
-transport = "streamable_http"
+url = "https://mcp.example.com/postgres"
+transport = "websocket"
 tokenAlias = "postgres-service-token"
 authRequired = true
 disabled = true

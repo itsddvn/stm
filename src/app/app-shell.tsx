@@ -33,6 +33,7 @@ export function activateSkipLink(
 
 export function AppShell({ routeId, scenario, onScenarioChange, children }: AppShellProps) {
   const { locale, setLocale, t } = useI18n();
+  const fixtureRuntime = isFixtureRuntime();
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content" onClick={activateSkipLink}>{t("nav.skip")}</a>
@@ -51,13 +52,13 @@ export function AppShell({ routeId, scenario, onScenarioChange, children }: AppS
         </nav>
         <div className="sidebar-status">
           <span className="status-indicator" aria-hidden="true" />
-          <div><strong>{isFixtureRuntime() ? t("runtime.fixture") : t("runtime.desktop")}</strong><small>{t("runtime.ready")}</small></div>
+          <div><strong>{fixtureRuntime ? t("runtime.fixture") : t("runtime.desktop")}</strong><small>{t("runtime.ready")}</small></div>
         </div>
       </aside>
       <div className="workspace">
         <div className="utility-bar">
           <span className="machine-context">{t("runtime.machine")} <strong>macOS · arm64</strong></span>
-          {isFixtureRuntime() ? (
+          {fixtureRuntime ? (
             <label className="scenario-switcher">
               <span>{t("runtime.scenario")}</span>
               <select value={scenario} onChange={(event) => onScenarioChange(event.target.value as ScenarioId)}>

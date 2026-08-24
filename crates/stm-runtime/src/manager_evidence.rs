@@ -5,12 +5,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::process_supervisor::AllowlistedProcessSupervisor;
 use serde_json::Value as JsonValue;
 use stm_core::{
     catalog::ToolCatalogMapping,
     feasibility::process_supervisor::{
-        AllowedCommand, AllowlistedProcessSupervisor, ArgRule, CancelSignal, ExecutionRequest,
-        ExecutionStatus,
+        AllowedCommand, ArgRule, CancelSignal, ExecutionRequest, ExecutionStatus,
     },
     lifecycle::{
         command_environment, npm_source_args, validate_package_id, validate_target_version,

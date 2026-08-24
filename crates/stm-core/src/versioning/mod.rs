@@ -140,18 +140,24 @@ pub fn build_application_updates(
     }
 
     if let Some(product) = &versions.product_update {
-        if product.available {
-            updates.push(ApplicationUpdateRecord {
-                id: "update-product".to_string(),
-                resource_type: ApplicationUpdateKind::Product,
-                name: "STM".to_string(),
-                current: product.current_version.clone(),
-                target: product.target_version.clone(),
-                execution_mode: UpdateExecutionMode::SignedProductUpdate,
-                selected: false,
-                risk: "Separate signed product channel".to_string(),
-            });
-        }
+        updates.push(ApplicationUpdateRecord {
+            id: "update-product".to_string(),
+            resource_type: ApplicationUpdateKind::Product,
+            name: "STM".to_string(),
+            current: product.current_version.clone(),
+            target: product.target_version.clone(),
+            execution_mode: if product.available {
+                UpdateExecutionMode::SignedProductUpdate
+            } else {
+                UpdateExecutionMode::DetectOnly
+            },
+            selected: false,
+            risk: if product.available {
+                "Separate signed product channel".to_string()
+            } else {
+                "No executable signed product update is available".to_string()
+            },
+        });
     }
 
     updates
@@ -173,5 +179,26 @@ mod tests {
         assert!(versions.tool_updates.contains_key("codex-cli"));
         assert!(versions.skill_updates.contains_key("frontend-design"));
         assert!(versions.product_update.is_some());
+    }
+
+    #[test]
+    fn unavailable_product_update_remains_visible_and_detect_only() {
+        let versions = VersionCatalog {
+            product_update: Some(ProductUpdateEvidence {
+                current_version: "0.1.0".into(),
+                target_version: "0.1.0".into(),
+                available: false,
+            }),
+            ..VersionCatalog::default()
+        };
+
+        let updates = build_application_updates(&[], &[], &versions);
+
+        assert_eq!(updates.len(), 1);
+        let product = &updates[0];
+        assert_eq!(product.id, "update-product");
+        assert_eq!(product.resource_type, ApplicationUpdateKind::Product);
+        assert_eq!(product.execution_mode, UpdateExecutionMode::DetectOnly);
+        assert!(!product.selected);
     }
 }

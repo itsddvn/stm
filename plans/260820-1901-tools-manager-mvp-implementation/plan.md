@@ -48,9 +48,9 @@ Source authority: [market and MVP report v0.5.0](../reports/researcher-2026-08-2
 | 3 | [Read-only Core](./phase-03-read-only-core.md) | Completed |
 | 4 | [Desktop Read-only Integration](./phase-04-desktop-read-only-integration.md) | Completed |
 | 5 | [Safe Tool Lifecycle](./phase-05-safe-tool-lifecycle.md) | Completed |
-| 6 | [Trusted Global Skill Lifecycle](./phase-06-trusted-global-skill-lifecycle.md) | Blocked — trust gate |
-| 7 | [MCP Server Lifecycle](./phase-07-mcp-server-lifecycle.md) | Blocked — Phases 5-6 and MCP gate |
-| 8 | [Cross-platform Release Hardening](./phase-08-cross-platform-release-hardening.md) | Blocked — Phases 5-7 and release gates |
+| 6 | [Trusted Global Skill Lifecycle](./phase-06-trusted-global-skill-lifecycle.md) | Completed |
+| 7 | [MCP Server Lifecycle](./phase-07-mcp-server-lifecycle.md) | Completed |
+| 8 | [Cross-platform Release Hardening](./phase-08-cross-platform-release-hardening.md) | Blocked — protected signing/notarization credentials and signed fresh-machine evidence |
 
 ## Dependencies and Locks
 
@@ -59,9 +59,9 @@ Source authority: [market and MVP report v0.5.0](../reports/researcher-2026-08-2
 - Phase 2 depends on Phase 1 and adds Tauri/Rust plus supported MCP-client feasibility without changing the approved interface.
 - Phase 3 depends on Phase 2; Phase 4 depends on Phase 3 and replaces fixture IPC with real read-only IPC for tools, skills, and MCP configurations.
 - Phase 5 depends on Phases 3 and 4. Phase 6 depends on Phases 4 and 5 so it reuses the implemented immutable planning/consent substrate rather than duplicating it.
-- Phase 6 is additionally gated by the trusted skill catalog publisher, review, signing/authentication, and update mechanism decision.
+- Phase 6 trust gate is approved: public `itsddvn/stm-skill-catalog` distribution, project-lead review, exact-byte detached Ed25519 signatures, compiled trust roots, monotonic expiry-bound snapshots, fixed HTTPS updates, bundled fallback, and app-release key rotation.
 - Phase 7 depends on Phases 4, 5, and 6; MCP changes reuse the same immutable plan, consent, receipt, partial-failure, and recovery substrate while preserving client-specific configuration semantics.
-- Phase 8 depends on Phases 4, 5, 6, and 7 and is gated by the supported OS/architecture matrix plus signing/notarization credentials.
+- Phase 8 depends on completed Phases 4-7. Its stable matrix is frozen; public release readiness remains gated by protected signing/notarization credentials plus signed fresh-machine and previous-version upgrade evidence.
 - Intentional UI changes reopen Phase 1, re-lock every affected later phase, require a running-UI verification and project-lead approval, bump the UI contract version, and propagate the decision through the plan before implementation resumes.
 - No overlapping unfinished project plan was found.
 - Official technical references: [Tauri project setup](https://v2.tauri.app/start/create-project/), [Tauri command scopes](https://v2.tauri.app/security/scope/), [Tauri testing](https://v2.tauri.app/develop/tests/), [Tauri updater](https://v2.tauri.app/plugin/updater/).
@@ -87,9 +87,7 @@ Source authority: [market and MVP report v0.5.0](../reports/researcher-2026-08-2
 
 ## Open Questions
 
-1. Trusted skill catalog publisher/review/authentication mechanism must resolve before Phase 6 implementation.
-2. Supported MCP client configuration schemas, trust policy, and credential-reference mechanism must resolve in Phase 2 before Phase 7 implementation.
-3. Supported OS versions and CPU architectures must resolve in Phase 2 before the Phase 8 release matrix is frozen.
+1. Protected updater, Apple signing/notarization, and Windows signing credentials plus disposable stable-matrix machines are required to complete the signed release gate.
 
 ## Current State
 
@@ -98,7 +96,10 @@ Source authority: [market and MVP report v0.5.0](../reports/researcher-2026-08-2
 - Phase 2 is complete: the pinned Rust/Tauri workspace, typed contracts, safe process supervisor, SQLite migration, fixture-backed manager/skill/MCP feasibility adapters, deny-by-default host capabilities, architecture records, and CI gates are implemented. The live macOS Tauri shell renders UI Contract v1; all frontend and Rust quality gates pass. Phase 3 may begin.
 - Phase 3 is complete: ten Recommended and forty Candidate catalog entries, five manager families, compiled tool probes, owner reconciliation, bounded global skill scanning, redacted MCP discovery, transactional SQLite snapshots, authority-scoped update detection, deterministic headless scan events, and locked read models are implemented. Phase 3 verification, all 28 Rust tests, and all frontend quality gates pass; Phase 4 may begin.
 - Phase 4 is complete: the approved React surface selects a typed Tauri runtime client in desktop mode, binds Rust refresh/cancellation/diagnostics/source-analysis behavior, polls and subscribes to progress events, preserves last-good snapshots, retains deterministic browser fixtures, and exposes no lifecycle mutation command to the webview. UI Contract v1, renderer integration tests, frontend/Rust gates, release compilation, native macOS launch, and persisted snapshot checks passed. Phase 5 may begin against locked UI Contract v1.1.
-- Phase 5 is complete: bounded source analysis, immutable planning and consent, deny-by-default mapping policy, reviewed manager commands, vendor handoff, privilege boundaries, process supervision, durable receipts/recovery, typed desktop IPC, and locked UI bindings are implemented. Local Rust/frontend/desktop/build gates, runtime post-verification, and independent correctness/security reviews passed. GitHub Actions [Lifecycle Platform Contracts run 32440872905](https://github.com/itsddvn/stm/actions/runs/32440872905), [Quality run 32440872961](https://github.com/itsddvn/stm/actions/runs/32440872961), and [UI Contract run 32440872906](https://github.com/itsddvn/stm/actions/runs/32440872906) are green with Node 24-native action runtimes. Phase 6 is blocked only by its explicit trusted skill catalog gate.
+- Phase 5 is complete: bounded source analysis, immutable planning and consent, deny-by-default mapping policy, reviewed manager commands, vendor handoff, privilege boundaries, process supervision, durable receipts/recovery, typed desktop IPC, and locked UI bindings are implemented. Local Rust/frontend/desktop/build gates, runtime post-verification, and independent correctness/security reviews passed. GitHub Actions [Lifecycle Platform Contracts run 32440872905](https://github.com/itsddvn/stm/actions/runs/32440872905), [Quality run 32440872961](https://github.com/itsddvn/stm/actions/runs/32440872961), and [UI Contract run 32440872906](https://github.com/itsddvn/stm/actions/runs/32440872906) are green with Node 24-native action runtimes. Phase 6 may begin against the approved trust gate.
+- Phase 6 is complete: authenticated exact-byte catalog activation, pinned Ed25519 trust roots, immutable Git resolution, staged tree validation, receipt-backed global materialization, conflict detection, partial failure, rollback, typed desktop IPC, cross-platform tests, and locked UI binding are implemented.
+- Phase 7 is complete: bounded Codex/Claude Code/Cursor discovery, client-specific normalization, approved stdio and remote mappings, capability/auth-reference binding, direct immutable UI plans, explicit consent, cross-process config locking, atomic mutation, protocol initialization health, encrypted OS-keyring-backed backups, partial outcomes, keep-partial, and digest-safe rollback/recovery are implemented. Rust/frontend/catalog/UI-contract/release gates and isolated runtime disable/rollback verification pass.
+- Phase 8 local hardening is implemented: four-target stable/two-target experimental matrix, release-only CSP and updater config injection, typed consent-bound product updater with separate durable receipts, protected signed-draft workflow, dependency/security/secret/SBOM/CodeQL/provenance gates, streaming artifact verification, behavioral tooling checks, support/security/deployment docs, and internal packaged launch. Public release remains blocked on protected credentials and signed cross-platform install/upgrade evidence.
 
 ## Validation Log
 
@@ -198,6 +199,81 @@ Source authority: [market and MVP report v0.5.0](../reports/researcher-2026-08-2
 - Runtime post-verification passed recovery-plan consent review, credential-bearing source rejection/redaction, and packaged single-instance behavior.
 - Independent correctness and security reviewers returned READY; no evidence-backed P1/P2 remains.
 - GitHub Actions [Lifecycle Platform Contracts run 32440872905](https://github.com/itsddvn/stm/actions/runs/32440872905) passed all Windows, macOS, Ubuntu, Fedora, Arch, non-root, and cross-platform core jobs. [Quality run 32440872961](https://github.com/itsddvn/stm/actions/runs/32440872961) and [UI Contract run 32440872906](https://github.com/itsddvn/stm/actions/runs/32440872906) also passed after action runtimes moved to Node 24.
-- Phase 5 is complete. Phase 6 remains blocked only by the trusted skill catalog publisher/review/authentication gate.
+- Phase 5 is complete. Session 4 resolves the trusted skill catalog gate and starts Phase 6.
+
+
+### Session 4 — 2026-08-21
+
+**Trigger:** Continue autonomously after Phase 5 passes and resolve the trusted skill catalog gate without changing UI Contract v1.1.
+
+**Questions asked:** 0. The project lead explicitly delegated implementation decisions needed to continue.
+
+#### Confirmed Decisions
+
+- Publish catalog metadata from a dedicated public `itsddvn/stm-skill-catalog` repository; the private application repository remains the verifier and schema authority.
+- Require project-lead review plus automated schema, provenance, digest, path, and duplicate-identity checks before stable publication.
+- Authenticate exact manifest bytes with detached Ed25519 signatures and application-pinned trust roots; remote content cannot add keys.
+- Bind monotonic version, channel, creation/expiry, payload SHA-256, and byte length; reject downgrade, expiry, same-version drift, unknown/revoked keys, and invalid signatures.
+- Fetch only fixed bounded HTTPS paths, retain bundled/last-known-good snapshots, rotate keys through signed application releases, and defer private Git credentials and non-GitHub hosts.
+
+#### Impact on Phases
+
+- Phase 6 was unblocked to implement the authenticated catalog, immutable public Git resolution, staged validation, receipt-backed materialization, and approved locked UI bindings.
+- Phase 7 retained the shared lifecycle gates and remained dependent on completed Phase 6 behavior.
+
+
+### Session 5 — 2026-08-21
+
+**Trigger:** Continue autonomously through Phase 6 and Phase 7, then review every Stage 1 acceptance gap before advancing.
+
+**Questions asked:** 0. The project lead explicitly required continuous implementation and allowed plan corrections needed for readiness.
+
+#### Completed Decisions
+
+- Phase 6 consumes only authenticated, monotonic, expiry-bound skill catalogs and immutable Git/tree provenance before materialization.
+- Phase 7 supports Codex, Claude Code, and Cursor MCP bindings with approved mapping metadata, unavailable-reference fail-closed behavior, and no generic shell or webview filesystem authority.
+- MCP config backups use authenticated XChaCha20-Poly1305 envelopes; the key is held by macOS Keychain, Windows Credential Manager, or Linux Secret Service.
+- Existing MCP configure/enable/disable/remove actions open direct immutable plans. Only add or source-changing flows analyze a source URL; the approved route, action, copy, and evidence hierarchy remain unchanged.
+- Persistent file locks plus digest checks serialize overlapping config writers; recovery never overwrites a target that differs from the reviewed replacement.
+
+#### Verification Results
+
+- Rust formatting, clippy with warnings denied, 96 core tests, MCP-focused regression tests, frontend lint/typecheck, 16 UI tests, approved MCP catalog verification, UI Contract v1.1 lock verification, production web build, and release Tauri build pass.
+- Fixture-browser runtime proves direct MCP plan review, consent gating, execution progress, refresh, and terminal success.
+- Isolated real-service runtime proves encrypted backup creation with plaintext exclusion and exact receipt-backed rollback.
+- Review status is recorded in the Phase 7 completion evidence and post-verification report.
+
+#### Phase Impact
+
+- Phases 6 and 7 are complete.
+- Phase 8 matrix and local release hardening are implemented; protected signing/notarization credentials and signed fresh-machine evidence remain external blockers.
+
+
+### Session 6 — 2026-08-21
+
+**Trigger:** Continue all reachable release hardening after Phase 7 Stage 1 passed, without making an unsigned public-release claim.
+
+**Questions asked:** 0. Repository evidence supported a conservative stable matrix; missing credentials are an external gate, not an implementation choice.
+
+#### Completed Decisions
+
+- Stable releases target macOS arm64/x64, Windows x64, and Ubuntu/glibc x64. Windows and Linux ARM64 remain experimental until signed native-webview and lifecycle smoke exists.
+- Internal builds keep release bundles/updater artifacts disabled and omit the updater plugin. Protected release builds inject the reviewed public key into a mode-0600 generated config and fail when required credentials are absent.
+- Product update planning, consent, metadata revalidation, signed download/install, status, and durable receipts remain typed Rust-host behavior separate from tool, skill, and MCP state.
+- Signed workflow output remains a draft. Updater metadata is promoted last, only after artifact and fresh-machine gates.
+
+#### Local Verification
+
+- Release contract/tooling/secret checks, UI Contract v1.1, frontend lint/typecheck and 19 tests, Rust format/clippy and 103 tests, internal Tauri release build, generated release-config build, workflow YAML parsing, dependency audit, and packaged launch pass.
+- Fixture UI verifies an exact signed product plan and an independent recoverable terminal boundary.
+- Artifact verifier accepts a valid signed fixture and rejects wrong-version metadata; release config generation rejects a missing updater key and does not print the injected key.
+- Focused Phase 8 correctness and security re-reviews pass after exact provenance, step-scoped/pinned signing, signed metadata/artifact verification, single-use consent, Windows restart reconciliation, and product History dispatch fixes.
+
+#### External Blockers
+
+- Protected updater private key/password and reviewed updater public key.
+- Apple signing certificate, identity, account app password, team ID, and notarization access.
+- Windows signing PFX/password/thumbprint.
+- Signed draft install/update/recovery and critical-screen evidence on every stable matrix target.
 
 <!-- slug: tools-manager-mvp-implementation -->

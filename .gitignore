@@ -13,6 +13,9 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+*.key
+*.pem
+
 .DS_Store
 Thumbs.db
 

@@ -24,7 +24,8 @@ use crate::{
     inventory::{
         current_native_linux_manager, current_platform_slug, mapping_for_platform, scan_inventory,
     },
-    ports::HostExecutableResolver,
+    ports::{HostExecutableResolver, McpLifecyclePort, SkillLifecyclePort},
+    skill_lifecycle::PreparedSkillMutation,
     skills::scan_skills,
     versioning::{build_application_updates, load_version_catalog},
 };
@@ -36,6 +37,12 @@ use super::{
     time::{format_timestamp, PLAN_TTL},
 };
 
+#[derive(Debug, Clone)]
+pub(crate) enum PreparedSkillAction {
+    Materialize(Box<PreparedSkillMutation>),
+    RestoreBackup(String),
+    KeepPartial,
+}
 #[derive(Debug, Clone)]
 pub(crate) struct PreparedPlan {
     pub dependency_key: String,
@@ -51,6 +58,16 @@ pub(crate) struct PreparedPlan {
     pub precondition_expected_version: Option<String>,
     pub postcondition_executable_paths: Vec<String>,
     pub staged: bool,
+    pub skill_action: Option<PreparedSkillAction>,
+    pub mcp_action: Option<crate::mcp::lifecycle::PreparedMcpAction>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct PlannerContext<'a> {
+    pub(crate) manager_evidence: &'a dyn ManagerEvidencePort,
+    pub(crate) host: &'a dyn HostExecutableResolver,
+    pub(crate) skill_lifecycle: &'a dyn SkillLifecyclePort,
+    pub(crate) mcp_lifecycle: &'a dyn McpLifecyclePort,
 }
 
 struct ToolPlanContext<'a> {
@@ -65,8 +82,7 @@ struct ToolPlanContext<'a> {
 
 pub(crate) fn prepare_plan(
     workspace: &FixtureWorkspace,
-    manager_evidence: &dyn ManagerEvidencePort,
-    host: &dyn HostExecutableResolver,
+    context: PlannerContext<'_>,
     request: LifecyclePlanRequest,
     source: Option<&SourceAnalysisBinding>,
     sequence: u64,
@@ -83,18 +99,31 @@ pub(crate) fn prepare_plan(
     if request.resource_kind == LifecycleResourceKind::Operation
         && (request.action == "update-queue" || request.action == "setup-queue")
     {
-        return prepare_batch(workspace, manager_evidence, host, request, sequence, now);
+        return prepare_batch(workspace, context, request, sequence, now);
     }
     if request.resource_kind == LifecycleResourceKind::Tool {
         return prepare_tool(
             workspace,
-            manager_evidence,
-            host,
+            context.manager_evidence,
+            context.host,
             request,
             source,
             sequence,
             now,
         );
+    }
+    if request.resource_kind == LifecycleResourceKind::Skill {
+        return super::skill_planner::prepare_skill(
+            workspace,
+            context.skill_lifecycle,
+            request,
+            source,
+            sequence,
+            now,
+        );
+    }
+    if request.resource_kind == LifecycleResourceKind::Mcp {
+        return super::mcp_planner::prepare_mcp(workspace, context, request, source, sequence, now);
     }
     prepare_review_only(
         request,
@@ -210,6 +239,8 @@ pub(crate) fn prepare_native_installer_plan(
         children: Vec::new(),
         depends_on: Vec::new(),
         staged: false,
+        skill_action: None,
+        mcp_action: None,
         exact_mapping: false,
         postcondition_executable_paths: Vec::new(),
 
@@ -316,13 +347,14 @@ pub(crate) fn prepare_archive_installer_plan(
         precondition_expected_version: None,
         postcondition_executable_paths: Vec::new(),
         staged: false,
+        skill_action: None,
+        mcp_action: None,
     })
 }
 
 pub(crate) fn prepare_setup_batch_with_bootstrap(
     workspace: &FixtureWorkspace,
-    manager_evidence: &dyn ManagerEvidencePort,
-    host: &dyn HostExecutableResolver,
+    context: PlannerContext<'_>,
     request: LifecyclePlanRequest,
     artifact: &VerifiedInstallerArtifact,
     sequence: u64,
@@ -330,8 +362,7 @@ pub(crate) fn prepare_setup_batch_with_bootstrap(
 ) -> Result<PreparedPlan, CoreError> {
     prepare_setup_batch_with_provider_bootstraps(
         workspace,
-        manager_evidence,
-        host,
+        context,
         request,
         ProviderBootstrapArtifacts {
             homebrew: Some(artifact),
@@ -344,8 +375,7 @@ pub(crate) fn prepare_setup_batch_with_bootstrap(
 
 pub(crate) fn prepare_setup_batch_with_bun_bootstrap(
     workspace: &FixtureWorkspace,
-    manager_evidence: &dyn ManagerEvidencePort,
-    host: &dyn HostExecutableResolver,
+    context: PlannerContext<'_>,
     request: LifecyclePlanRequest,
     artifact: &VerifiedArchiveBinary,
     sequence: u64,
@@ -353,8 +383,7 @@ pub(crate) fn prepare_setup_batch_with_bun_bootstrap(
 ) -> Result<PreparedPlan, CoreError> {
     prepare_setup_batch_with_provider_bootstraps(
         workspace,
-        manager_evidence,
-        host,
+        context,
         request,
         ProviderBootstrapArtifacts {
             homebrew: None,
@@ -372,8 +401,7 @@ pub(crate) struct ProviderBootstrapArtifacts<'a> {
 
 pub(crate) fn prepare_setup_batch_with_provider_bootstraps(
     workspace: &FixtureWorkspace,
-    manager_evidence: &dyn ManagerEvidencePort,
-    host: &dyn HostExecutableResolver,
+    context: PlannerContext<'_>,
     request: LifecyclePlanRequest,
     artifacts: ProviderBootstrapArtifacts<'_>,
     sequence: u64,
@@ -394,7 +422,7 @@ pub(crate) fn prepare_setup_batch_with_provider_bootstraps(
     if let Some(artifact) = homebrew_artifact {
         let request = provider_bootstrap_request(&artifact.provider_id);
         bootstraps.push(prepare_native_installer_plan(
-            host,
+            context.host,
             request,
             artifact,
             next_sequence,
@@ -405,7 +433,7 @@ pub(crate) fn prepare_setup_batch_with_provider_bootstraps(
     if let Some(artifact) = bun_artifact {
         let request = provider_bootstrap_request(&artifact.provider_id);
         bootstraps.push(prepare_archive_installer_plan(
-            host,
+            context.host,
             request,
             artifact,
             next_sequence,
@@ -414,14 +442,7 @@ pub(crate) fn prepare_setup_batch_with_provider_bootstraps(
         next_sequence = next_sequence.saturating_add(1);
     }
 
-    let mut batch = prepare_batch(
-        workspace,
-        manager_evidence,
-        host,
-        request,
-        next_sequence,
-        now,
-    )?;
+    let mut batch = prepare_batch(workspace, context, request, next_sequence, now)?;
     for child in &mut batch.children {
         let dependency =
             if homebrew_artifact.is_some() && child.plan.mapping_id.starts_with("homebrew:") {
@@ -710,6 +731,8 @@ pub(crate) fn prepare_codex_migration_plan(
         precondition_expected_version: None,
         preconditions: Vec::new(),
         staged: false,
+        skill_action: None,
+        mcp_action: None,
 
         exact_mapping: true,
     })
@@ -861,6 +884,8 @@ pub(crate) fn prepare_codex_migration_inspection_plan(
         precondition_executable_paths: Vec::new(),
         precondition_expected_version: None,
         staged: false,
+        skill_action: None,
+        mcp_action: None,
     })
 }
 pub(crate) fn prepare_codex_cleanup_retry_plan(
@@ -1015,6 +1040,8 @@ pub(crate) fn prepare_codex_cleanup_retry_plan(
         precondition_expected_version: None,
         postcondition_executable_paths: Vec::new(),
         staged: false,
+        skill_action: None,
+        mcp_action: None,
     })
 }
 
@@ -1328,6 +1355,8 @@ fn build_tool_plan(
         children: Vec::new(),
         depends_on: Vec::new(),
         staged: false,
+        skill_action: None,
+        mcp_action: None,
         exact_mapping: false,
         postcondition_executable_paths: Vec::new(),
         precondition_executable_paths: Vec::new(),
@@ -1338,8 +1367,7 @@ fn build_tool_plan(
 
 fn prepare_batch(
     workspace: &FixtureWorkspace,
-    manager_evidence: &dyn ManagerEvidencePort,
-    host: &dyn HostExecutableResolver,
+    context: PlannerContext<'_>,
     request: LifecyclePlanRequest,
     sequence: u64,
     now: SystemTime,
@@ -1526,15 +1554,30 @@ fn prepare_batch(
             .collect()
     };
     for (index, (child_request, depends_on)) in child_requests.into_iter().enumerate() {
-        let mut prepared = prepare_plan(
+        let child_sequence = sequence.saturating_mul(1000) + index as u64 + 1;
+        let fallback_request = child_request.clone();
+        let mut prepared = match prepare_plan(
             workspace,
-            manager_evidence,
-            host,
+            context,
             child_request,
             None,
-            sequence.saturating_mul(1000) + index as u64 + 1,
+            child_sequence,
             now,
-        )?;
+        ) {
+            Ok(prepared) => prepared,
+            Err(CoreError::LifecycleEvidenceChanged(detail))
+                if fallback_request.resource_kind == LifecycleResourceKind::Skill
+                    && detail == "no authenticated trusted skill catalog is available" =>
+            {
+                prepare_review_only(
+                    fallback_request,
+                    child_sequence,
+                    now,
+                    "Authenticated skill catalog is unavailable; this batch child remains review-only.",
+                )?
+            }
+            Err(error) => return Err(error),
+        };
         prepared.depends_on = depends_on;
         fingerprints.push(prepared.evidence_fingerprint.clone());
         identities.extend(prepared.executable_identities.clone());
@@ -1594,6 +1637,8 @@ fn prepare_batch(
         children: prepared_children,
         depends_on: Vec::new(),
         staged: false,
+        skill_action: None,
+        mcp_action: None,
         exact_mapping: false,
         postcondition_executable_paths: Vec::new(),
         precondition_executable_paths: Vec::new(),
@@ -1602,7 +1647,7 @@ fn prepare_batch(
     })
 }
 
-fn prepare_review_only(
+pub(super) fn prepare_review_only(
     request: LifecyclePlanRequest,
     sequence: u64,
     now: SystemTime,
@@ -1653,6 +1698,8 @@ fn prepare_review_only(
         children: Vec::new(),
         depends_on: Vec::new(),
         staged: false,
+        skill_action: None,
+        mcp_action: None,
         exact_mapping: false,
         postcondition_executable_paths: Vec::new(),
         precondition_executable_paths: Vec::new(),
@@ -1682,7 +1729,7 @@ fn source_authorizes_entry(
         && source.resource_id.as_deref() == Some(entry.id.as_str())
 }
 
-fn opaque_plan_id(
+pub(super) fn opaque_plan_id(
     sequence: u64,
     request: &LifecyclePlanRequest,
     now: SystemTime,
@@ -1693,7 +1740,7 @@ fn opaque_plan_id(
     Ok(format!("lifecycle-plan-{}", &digest[7..23]))
 }
 
-fn plan_digest(plan: &LifecyclePlan) -> Result<String, CoreError> {
+pub(super) fn plan_digest(plan: &LifecyclePlan) -> Result<String, CoreError> {
     let mut unsigned = plan.clone();
     unsigned.digest.clear();
     Ok(compute_sha256([serde_json::to_vec(&unsigned)?]))

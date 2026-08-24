@@ -10,14 +10,15 @@ use stm_core::{
         provider::MemoryPreferencesStore,
         setup::SetupRowAction,
     },
-    lifecycle::LifecycleService,
+    lifecycle::{LifecycleService, LifecycleServiceDependencies},
     ports::SnapshotStore,
 };
 use tempfile::TempDir;
 
 use crate::{
     detect_provider_inventory, BoundedHttpsSourceProbe, NativeProcessLiveness,
-    RealHostExecutableResolver, RealLifecycleExecutor, RealManagerEvidence, SqliteSnapshotStore,
+    RealHostExecutableResolver, RealLifecycleExecutor, RealManagerEvidence, RuntimeLiveInventory,
+    RuntimeMcpLifecycle, RuntimeSkillLifecycle, SqliteSnapshotStore,
 };
 
 #[test]
@@ -29,21 +30,32 @@ fn native_quick_setup_uses_live_host_evidence() {
         FixtureWorkspace::new(project_root.clone()).with_db_path(temp.path().join("stm.sqlite"));
     let (sqlite, _) = SqliteSnapshotStore::open(workspace.db_path()).expect("snapshot store");
     let storage: Arc<dyn SnapshotStore> = Arc::new(sqlite);
+    let database_path = workspace.db_path();
+    let skill_home = workspace.skill_home().expect("test home");
     let host = Arc::new(RealHostExecutableResolver);
     let lifecycle = LifecycleService::with_dependencies(
         workspace,
-        Arc::new(RealLifecycleExecutor),
-        Arc::new(BoundedHttpsSourceProbe),
-        Arc::new(RealManagerEvidence::new(host.clone())),
-        host,
-        storage.clone(),
-        Arc::new(NativeProcessLiveness),
+        LifecycleServiceDependencies {
+            executor: Arc::new(RealLifecycleExecutor),
+            source_probe: Arc::new(BoundedHttpsSourceProbe),
+            manager_evidence: Arc::new(RealManagerEvidence::new(host.clone())),
+            host,
+            storage: storage.clone(),
+            process_liveness: Arc::new(NativeProcessLiveness),
+            skill_lifecycle: Arc::new(RuntimeSkillLifecycle::new(
+                database_path.clone(),
+                temp.path().to_path_buf(),
+                skill_home.clone(),
+            )),
+            mcp_lifecycle: Arc::new(RuntimeMcpLifecycle::new(database_path, skill_home)),
+        },
     );
     let service = PhaseThreeApplicationService::with_services(
         project_root,
         lifecycle,
         storage,
         Arc::new(MemoryPreferencesStore::new()),
+        Arc::new(RuntimeLiveInventory),
     );
     let scan = service.headless_scan().expect("live headless scan");
     println!(

@@ -125,7 +125,7 @@ function HistoryLifecycleDialog({
             {lifecycle.stage === "result" ? "Close" : followUpKind === "inspect" ? "Close" : "Cancel"}
           </button>
           {lifecycle.stage === "review" && lifecycle.plan?.execution.mode !== "detect_only" ? (
-            <button className="primary-button" type="button" disabled={!lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}>
+            <button className="primary-button" type="button" disabled={lifecycle.starting || !lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}>
               <AppIcon name={followUpKind === "recover" ? "rollback" : "run"} />
               Authorize &amp; Start
             </button>

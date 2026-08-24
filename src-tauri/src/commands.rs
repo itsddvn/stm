@@ -25,9 +25,10 @@ use stm_core::{
         service::{DiagnosticsReport, HeadlessScanResult},
     },
     domain::{
+        application_update::ApplicationUpdateKind,
         lifecycle::{
             LifecycleConsentAuthorization, LifecycleExecutionResult, LifecyclePlan,
-            LifecyclePlanRequest,
+            LifecyclePlanRequest, LifecycleResourceKind,
         },
         source::SourceKind,
     },
@@ -40,7 +41,7 @@ use stm_runtime::{
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
-use crate::state::AppState;
+use crate::{product_update::ProductUpdateRuntime, state::AppState};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -110,13 +111,26 @@ pub fn get_mcp_detail(
 }
 
 #[tauri::command]
-pub fn list_updates(state: State<'_, AppState>) -> CommandResult<Vec<UpdateViewModelDto>> {
-    state.service().list_updates().map_err(render_error)
+pub async fn list_updates(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
+) -> CommandResult<Vec<UpdateViewModelDto>> {
+    let mut updates = state.service().list_updates().map_err(render_error)?;
+    let product = UpdateViewModelDto::from(&product_updates.availability(&app).await);
+    upsert_product_update(&mut updates, product);
+    Ok(updates)
 }
 
 #[tauri::command]
-pub fn list_operations(state: State<'_, AppState>) -> CommandResult<Vec<OperationViewModelDto>> {
-    state.service().list_operations().map_err(render_error)
+pub fn list_operations(
+    state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
+) -> CommandResult<Vec<OperationViewModelDto>> {
+    let mut operations = state.service().list_operations().map_err(render_error)?;
+    operations.extend(product_updates.operation_views()?);
+    operations.sort_by(|left, right| right.started_at.cmp(&left.started_at));
+    Ok(operations)
 }
 
 #[tauri::command]
@@ -131,10 +145,15 @@ pub fn analyze_source(
         .map_err(render_error)
 }
 #[tauri::command]
-pub fn prepare_lifecycle_plan(
+pub async fn prepare_lifecycle_plan(
+    app: AppHandle,
     request: LifecyclePlanRequest,
     state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
 ) -> CommandResult<LifecyclePlan> {
+    if request.resource_kind == LifecycleResourceKind::Product {
+        return product_updates.prepare(&app, request).await;
+    }
     let providers = detect_provider_inventory();
     let requirements = state
         .service()
@@ -179,18 +198,23 @@ pub fn prepare_lifecycle_plan(
 }
 
 #[tauri::command]
-pub fn start_lifecycle_operation(
+pub async fn start_lifecycle_operation(
     app: AppHandle,
     plan_id: String,
     authorization: LifecycleConsentAuthorization,
     locale: Option<String>,
     state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
 ) -> CommandResult<LifecycleExecutionResult> {
     let locale = locale.unwrap_or_else(|| "vi".to_string());
-    let summary = state
-        .service()
-        .native_confirmation_summary(&plan_id, &locale)
-        .map_err(render_error)?;
+    let summary = if product_updates.contains_plan(&plan_id) {
+        product_updates.native_confirmation_summary(&plan_id, &locale)?
+    } else {
+        state
+            .service()
+            .native_confirmation_summary(&plan_id, &locale)
+            .map_err(render_error)?
+    };
     let confirmed = app
         .dialog()
         .message(summary)
@@ -207,32 +231,46 @@ pub fn start_lifecycle_operation(
             "native confirmation denied".to_string(),
         )));
     }
-    state
-        .service()
-        .start_lifecycle(&plan_id, authorization)
-        .map_err(render_error)
+    if product_updates.contains_plan(&plan_id) {
+        product_updates.start(&app, &plan_id, authorization).await
+    } else {
+        state
+            .service()
+            .start_lifecycle(&plan_id, authorization)
+            .map_err(render_error)
+    }
 }
 
 #[tauri::command]
 pub fn lifecycle_operation_status(
     operation_id: String,
     state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
 ) -> CommandResult<LifecycleExecutionResult> {
-    state
-        .service()
-        .lifecycle_status(&operation_id)
-        .map_err(render_error)
+    if product_updates.contains_operation(&operation_id) {
+        product_updates.status(&operation_id)
+    } else {
+        state
+            .service()
+            .lifecycle_status(&operation_id)
+            .map_err(render_error)
+    }
 }
 
 #[tauri::command]
 pub fn cancel_lifecycle_operation(
     operation_id: String,
     state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
 ) -> CommandResult<LifecycleExecutionResult> {
-    state
-        .service()
-        .cancel_lifecycle(&operation_id)
-        .map_err(render_error)
+    if product_updates.contains_operation(&operation_id) {
+        product_updates.status(&operation_id)
+    } else {
+        state
+            .service()
+            .cancel_lifecycle(&operation_id)
+            .map_err(render_error)
+    }
 }
 
 #[tauri::command]
@@ -437,6 +475,57 @@ fn replace_export_file(temp: &Path, path: &Path) -> CommandResult<()> {
     }
 }
 
+fn upsert_product_update(updates: &mut Vec<UpdateViewModelDto>, product: UpdateViewModelDto) {
+    if let Some(existing) = updates
+        .iter_mut()
+        .find(|update| update.resource_type == ApplicationUpdateKind::Product)
+    {
+        *existing = product;
+    } else {
+        updates.push(product);
+    }
+}
+
 fn render_error(error: CoreError) -> String {
     error.to_string()
+}
+#[cfg(test)]
+mod tests {
+    use stm_core::domain::application_update::UpdateExecutionMode;
+
+    use super::*;
+
+    fn update(id: &str, resource_type: ApplicationUpdateKind) -> UpdateViewModelDto {
+        UpdateViewModelDto {
+            id: id.into(),
+            resource_type,
+            name: id.into(),
+            current: "1.0.0".into(),
+            target: "2.0.0".into(),
+            execution_mode: UpdateExecutionMode::ManagedExecute,
+            selected: false,
+            risk: String::new(),
+            selection_action: None,
+            review_action: None,
+        }
+    }
+
+    #[test]
+    fn product_availability_upsert_preserves_tool_and_skill_updates() {
+        let mut updates = vec![
+            update("update-tool", ApplicationUpdateKind::Tool),
+            update("update-skill", ApplicationUpdateKind::Skill),
+            update("stale-product", ApplicationUpdateKind::Product),
+        ];
+        let mut product = update("update-product", ApplicationUpdateKind::Product);
+        product.execution_mode = UpdateExecutionMode::DetectOnly;
+
+        upsert_product_update(&mut updates, product);
+
+        assert_eq!(updates.len(), 3);
+        assert_eq!(updates[0].id, "update-tool");
+        assert_eq!(updates[1].id, "update-skill");
+        assert_eq!(updates[2].id, "update-product");
+        assert_eq!(updates[2].execution_mode, UpdateExecutionMode::DetectOnly);
+    }
 }

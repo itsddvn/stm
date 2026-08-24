@@ -25,6 +25,54 @@ use stm_core::{
 #[derive(Debug, Default)]
 pub struct RealHostExecutableResolver;
 
+pub fn compile_mcp_stdio(
+    command: &str,
+    args: &[String],
+) -> Result<Option<CompiledManagerCommand>, CoreError> {
+    let host = RealHostExecutableResolver;
+    let Some(launcher) = host.resolve_executable(command) else {
+        return Ok(None);
+    };
+    if command == "npx" {
+        let canonical_launcher = fs::canonicalize(&launcher)?;
+        let script = if canonical_launcher
+            .extension()
+            .and_then(|value| value.to_str())
+            == Some("js")
+        {
+            canonical_launcher
+        } else {
+            launcher
+                .parent()
+                .map(|parent| parent.join("node_modules/npm/bin/npx-cli.js"))
+                .filter(|path| path.is_file())
+                .ok_or_else(|| {
+                    CoreError::ProcessSpawn(
+                        "trusted npx JavaScript entry point is unavailable".into(),
+                    )
+                })?
+        };
+        let node = resolve_node_for_npm(&launcher).ok_or_else(|| {
+            CoreError::ProcessSpawn("trusted Node.js runtime is unavailable".into())
+        })?;
+        let node_identity = host.executable_identity(node)?;
+        let script_identity = host.executable_identity(script)?;
+        let mut argv = vec![script_identity.canonical_path.display().to_string()];
+        argv.extend_from_slice(args);
+        return Ok(Some(CompiledManagerCommand {
+            executable: node_identity.canonical_path.clone(),
+            argv,
+            identities: vec![node_identity, script_identity],
+        }));
+    }
+    let identity = host.executable_identity(launcher)?;
+    Ok(Some(CompiledManagerCommand {
+        executable: identity.canonical_path.clone(),
+        argv: args.to_vec(),
+        identities: vec![identity],
+    }))
+}
+
 pub(crate) struct NpmInvocation {
     pub executable: PathBuf,
     pub prefix_args: Vec<String>,

@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs,
+    env, fs,
     path::{Path, PathBuf},
 };
 
@@ -13,6 +13,7 @@ use crate::error::CoreError;
 pub struct FixtureWorkspace {
     project_root: PathBuf,
     db_path_override: Option<PathBuf>,
+    skill_home_override: Option<PathBuf>,
 }
 
 impl FixtureWorkspace {
@@ -20,11 +21,21 @@ impl FixtureWorkspace {
         Self {
             project_root: project_root.into(),
             db_path_override: None,
+            skill_home_override: None,
         }
     }
     pub fn with_db_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.db_path_override = Some(path.into());
         self
+    }
+
+    pub fn with_skill_home(mut self, path: impl Into<PathBuf>) -> Self {
+        self.skill_home_override = Some(path.into());
+        self
+    }
+
+    pub fn has_skill_home_override(&self) -> bool {
+        self.skill_home_override.is_some()
     }
 
     pub fn project_root(&self) -> &Path {
@@ -45,6 +56,25 @@ impl FixtureWorkspace {
             .unwrap_or_else(|| self.project_root.join("target/stm-phase-three/stm.sqlite"))
     }
 
+    pub fn skill_home(&self) -> Result<PathBuf, CoreError> {
+        self.skill_home_override
+            .clone()
+            .or_else(|| env::var_os("HOME").map(PathBuf::from))
+            .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
+            .ok_or_else(|| {
+                CoreError::InvalidPath(
+                    "no user home directory is available for global skill targets".to_string(),
+                )
+            })
+    }
+
+    pub fn lifecycle_data_root(&self) -> PathBuf {
+        self.db_path()
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.project_root.join("target/stm-phase-three"))
+    }
+
     pub fn read_json<T>(&self, relative: &str) -> Result<T, CoreError>
     where
         T: DeserializeOwned,
@@ -62,6 +92,30 @@ impl FixtureWorkspace {
             return Ok(None);
         }
         Ok(Some(serde_json::from_str(&fs::read_to_string(path)?)?))
+    }
+    pub fn runtime_data_dir(&self) -> Result<PathBuf, CoreError> {
+        let home = self.skill_home()?;
+        #[cfg(target_os = "windows")]
+        {
+            let base = std::env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join("AppData").join("Local"));
+            return Ok(base.join("Tools Manager"));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Ok(home
+                .join("Library")
+                .join("Application Support")
+                .join("Tools Manager"))
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            let base = std::env::var_os("XDG_DATA_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".local").join("share"));
+            return Ok(base.join("tools-manager"));
+        }
     }
 
     pub fn read_json_value(&self, relative: &str) -> Result<JsonValue, CoreError> {

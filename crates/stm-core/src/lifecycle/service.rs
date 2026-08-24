@@ -22,7 +22,11 @@ use crate::{
     },
     error::CoreError,
     feasibility::{process_supervisor::CancelSignal, source_analysis::analyze_source},
-    ports::{HostExecutableResolver, ProcessLiveness, SnapshotStore},
+    ports::{
+        HostExecutableResolver, McpLifecyclePort, ProcessLiveness, SkillLifecyclePort,
+        SnapshotStore,
+    },
+    skill_lifecycle::{PartialFailurePolicy, SkillMutationOutcome, TargetMutationStatus},
     storage::OperationLogEntry,
 };
 
@@ -33,7 +37,8 @@ use super::{
         prepare_codex_cleanup_retry_plan, prepare_codex_migration_inspection_plan,
         prepare_codex_migration_plan, prepare_exact_tool_plan, prepare_native_installer_plan,
         prepare_plan, prepare_setup_batch_with_bootstrap, prepare_setup_batch_with_bun_bootstrap,
-        prepare_setup_batch_with_provider_bootstraps, PreparedPlan, ProviderBootstrapArtifacts,
+        prepare_setup_batch_with_provider_bootstraps, PlannerContext, PreparedPlan,
+        PreparedSkillAction, ProviderBootstrapArtifacts,
     },
     source_probe::{analyze_source_with_probe, SourceProbe},
     source_registry::SourceAnalysisBinding,
@@ -41,6 +46,17 @@ use super::{
 };
 
 const SOURCE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+#[derive(Clone)]
+pub struct LifecycleServiceDependencies {
+    pub executor: Arc<dyn LifecycleExecutionPort>,
+    pub source_probe: Arc<dyn SourceProbe>,
+    pub manager_evidence: Arc<dyn ManagerEvidencePort>,
+    pub host: Arc<dyn HostExecutableResolver>,
+    pub storage: Arc<dyn SnapshotStore>,
+    pub process_liveness: Arc<dyn ProcessLiveness>,
+    pub skill_lifecycle: Arc<dyn SkillLifecyclePort>,
+    pub mcp_lifecycle: Arc<dyn McpLifecyclePort>,
+}
 
 #[derive(Clone)]
 pub struct LifecycleService {
@@ -52,6 +68,8 @@ pub struct LifecycleService {
     host: Arc<dyn HostExecutableResolver>,
     storage: Arc<dyn SnapshotStore>,
     process_liveness: Arc<dyn ProcessLiveness>,
+    skill_lifecycle: Arc<dyn SkillLifecyclePort>,
+    mcp_lifecycle: Arc<dyn McpLifecyclePort>,
     snapshot_merge: Arc<Mutex<()>>,
     recovery_blocker: Arc<Mutex<Option<String>>>,
 }
@@ -87,13 +105,18 @@ struct CachedSource {
 impl LifecycleService {
     pub fn with_dependencies(
         workspace: FixtureWorkspace,
-        executor: Arc<dyn LifecycleExecutionPort>,
-        source_probe: Arc<dyn SourceProbe>,
-        manager_evidence: Arc<dyn ManagerEvidencePort>,
-        host: Arc<dyn HostExecutableResolver>,
-        storage: Arc<dyn SnapshotStore>,
-        process_liveness: Arc<dyn ProcessLiveness>,
+        dependencies: LifecycleServiceDependencies,
     ) -> Self {
+        let LifecycleServiceDependencies {
+            executor,
+            source_probe,
+            manager_evidence,
+            host,
+            storage,
+            process_liveness,
+            skill_lifecycle,
+            mcp_lifecycle,
+        } = dependencies;
         let service = Self {
             workspace,
             state: Arc::new(Mutex::new(LifecycleState::default())),
@@ -103,10 +126,13 @@ impl LifecycleService {
             host,
             storage,
             process_liveness,
+            skill_lifecycle,
+            mcp_lifecycle,
             snapshot_merge: Arc::new(Mutex::new(())),
             recovery_blocker: Arc::new(Mutex::new(None)),
         };
-        match service.recover_interrupted_operations() {
+        let recovery = service.recover_all_interrupted_operations();
+        match recovery {
             Ok(false) => {}
             Ok(true) => {
                 *service
@@ -130,6 +156,15 @@ impl LifecycleService {
         service
     }
 
+    fn planner_context(&self) -> PlannerContext<'_> {
+        PlannerContext {
+            manager_evidence: self.manager_evidence.as_ref(),
+            host: self.host.as_ref(),
+            skill_lifecycle: self.skill_lifecycle.as_ref(),
+            mcp_lifecycle: self.mcp_lifecycle.as_ref(),
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn with_ports(
         workspace: FixtureWorkspace,
@@ -139,12 +174,16 @@ impl LifecycleService {
     ) -> Self {
         Self::with_dependencies(
             workspace.clone(),
-            executor,
-            source_probe,
-            manager_evidence,
-            Arc::new(test_support::TestHost),
-            test_support::TestSnapshotStore::shared(workspace.db_path()),
-            Arc::new(test_support::TestProcessLiveness),
+            LifecycleServiceDependencies {
+                executor,
+                source_probe,
+                manager_evidence,
+                host: Arc::new(test_support::TestHost),
+                storage: test_support::TestSnapshotStore::shared(workspace.db_path()),
+                process_liveness: Arc::new(test_support::TestProcessLiveness),
+                skill_lifecycle: Arc::new(test_support::TestSkillLifecycle::default()),
+                mcp_lifecycle: Arc::new(test_support::TestMcpLifecycle::default()),
+            },
         )
     }
 
@@ -319,6 +358,14 @@ impl LifecycleService {
         self.refresh_tool_inventory(tool_id, current)
     }
 
+    fn recover_all_interrupted_operations(&self) -> Result<bool, CoreError> {
+        let live_process_found = self.recover_interrupted_operations()?;
+        let recorded_at = format_timestamp(now())?;
+        self.skill_lifecycle.recover_interrupted(&recorded_at)?;
+        self.mcp_lifecycle.recover_interrupted(&recorded_at)?;
+        Ok(live_process_found)
+    }
+
     fn ensure_recovery_ready(&self) -> Result<(), CoreError> {
         let blocked = self
             .recovery_blocker
@@ -326,15 +373,12 @@ impl LifecycleService {
             .expect("lifecycle recovery blocker")
             .is_some();
         if blocked {
-            match self.recover_interrupted_operations() {
-                Ok(false) => {
-                    *self
-                        .recovery_blocker
-                        .lock()
-                        .expect("lifecycle recovery blocker") = None;
-                }
-                Ok(true) => {}
-                Err(_) => {}
+            let recovery = self.recover_all_interrupted_operations();
+            if matches!(recovery, Ok(false)) {
+                *self
+                    .recovery_blocker
+                    .lock()
+                    .expect("lifecycle recovery blocker") = None;
             }
         }
         if let Some(reason) = self
@@ -405,8 +449,7 @@ impl LifecycleService {
             let restart_request = restart_safe_request(&operation, request);
             let evidence_summary = match prepare_plan(
                 &self.workspace,
-                self.manager_evidence.as_ref(),
-                self.host.as_ref(),
+                self.planner_context(),
                 restart_request.clone(),
                 None,
                 0,
@@ -549,8 +592,7 @@ impl LifecycleService {
         };
         let prepared = prepare_plan(
             &self.workspace,
-            self.manager_evidence.as_ref(),
-            self.host.as_ref(),
+            self.planner_context(),
             request,
             source.as_ref(),
             sequence,
@@ -604,8 +646,7 @@ impl LifecycleService {
         };
         let prepared = prepare_setup_batch_with_bootstrap(
             &self.workspace,
-            self.manager_evidence.as_ref(),
-            self.host.as_ref(),
+            self.planner_context(),
             request,
             artifact,
             sequence,
@@ -635,8 +676,7 @@ impl LifecycleService {
         };
         let prepared = prepare_setup_batch_with_bun_bootstrap(
             &self.workspace,
-            self.manager_evidence.as_ref(),
-            self.host.as_ref(),
+            self.planner_context(),
             request,
             artifact,
             sequence,
@@ -667,8 +707,7 @@ impl LifecycleService {
         };
         let prepared = prepare_setup_batch_with_provider_bootstraps(
             &self.workspace,
-            self.manager_evidence.as_ref(),
-            self.host.as_ref(),
+            self.planner_context(),
             request,
             ProviderBootstrapArtifacts {
                 homebrew: homebrew_artifact,
@@ -1026,6 +1065,14 @@ impl LifecycleService {
     fn revalidate(&self, original: &PreparedPlan) -> Result<(), CoreError> {
         if matches!(
             original.plan.execution,
+            LifecycleExecution::DetectOnly { .. }
+        ) && original.skill_action.is_none()
+            && original.mcp_action.is_none()
+        {
+            return Ok(());
+        }
+        if matches!(
+            original.plan.execution,
             LifecycleExecution::NativeInstaller { .. }
                 | LifecycleExecution::ArchiveInstaller { .. }
         ) {
@@ -1055,22 +1102,154 @@ impl LifecycleService {
         } else {
             prepare_plan(
                 &self.workspace,
-                self.manager_evidence.as_ref(),
-                self.host.as_ref(),
+                self.planner_context(),
                 original.plan.request.clone(),
                 source.as_ref(),
                 0,
                 now(),
             )?
         };
-        if current.evidence_fingerprint != original.evidence_fingerprint
-            || current.executable_identities != original.executable_identities
-        {
+        let evidence_changed = current.evidence_fingerprint != original.evidence_fingerprint
+            || current.executable_identities != original.executable_identities;
+        if let Some(PreparedSkillAction::Materialize(mutation)) = &current.skill_action {
+            self.skill_lifecycle.cleanup(&mutation.staging)?;
+        }
+        if evidence_changed {
             return Err(CoreError::LifecycleEvidenceChanged(
                 "canonical mapping, versions, ownership, privilege, or executable identity changed; review a fresh plan".to_string(),
             ));
         }
         Ok(())
+    }
+    fn execute_skill_action(
+        &self,
+        prepared: &PreparedPlan,
+        operation_id: &str,
+        cancel: &CancelSignal,
+    ) -> LifecycleExecutionResult {
+        let cleanup = || {
+            if let Some(PreparedSkillAction::Materialize(mutation)) = &prepared.skill_action {
+                let _ = self.skill_lifecycle.cleanup(&mutation.staging);
+            }
+        };
+        if cancel.is_cancelled() {
+            cleanup();
+            return aggregate_result(
+                &prepared.plan,
+                operation_id,
+                vec![(cancelled_item(&prepared.plan), false)],
+            );
+        }
+        if let Err(error) = self.revalidate(prepared) {
+            cleanup();
+            return failed_result(
+                &prepared.plan,
+                operation_id,
+                format!("Revalidation failed before execution: {error}"),
+            );
+        }
+        let recorded_at = format_timestamp(now()).unwrap_or_else(|_| "redacted".to_string());
+        let result = match prepared.skill_action.as_ref() {
+            Some(PreparedSkillAction::Materialize(mutation)) => {
+                let mut execution = mutation.as_ref().clone();
+                execution.operation_id = operation_id.to_string();
+                if prepared.plan.request.action.contains("export_diff") {
+                    self.skill_lifecycle.export_diff(&execution)
+                } else {
+                    let policy = if prepared.plan.request.action.contains("keep_local") {
+                        PartialFailurePolicy::KeepPartial
+                    } else {
+                        PartialFailurePolicy::RollbackCompleted
+                    };
+                    self.skill_lifecycle
+                        .materialize(&execution, policy, &recorded_at)
+                }
+            }
+            Some(PreparedSkillAction::RestoreBackup(backup_id)) => self
+                .skill_lifecycle
+                .restore_backup(backup_id, &recorded_at)
+                .map(|target| SkillMutationOutcome {
+                    operation_id: operation_id.to_string(),
+                    completed: 1,
+                    failed: 0,
+                    partial_state_kept: false,
+                    skipped: 0,
+                    targets: vec![target],
+                }),
+            Some(PreparedSkillAction::KeepPartial) => {
+                cleanup();
+                return successful_acknowledgement(
+                    &prepared.plan,
+                    operation_id,
+                    "Keep partial skill result",
+                    "Receipt-backed completed targets were kept; no additional files changed.",
+                );
+            }
+            None => unreachable!("skill execution requires a prepared skill action"),
+        };
+        cleanup();
+        match result {
+            Ok(outcome) => skill_execution_result(&prepared.plan, operation_id, outcome),
+            Err(error) => failed_result(
+                &prepared.plan,
+                operation_id,
+                format!("Skill lifecycle execution failed: {error}"),
+            ),
+        }
+    }
+
+    fn execute_mcp_action(
+        &self,
+        prepared: &PreparedPlan,
+        operation_id: &str,
+        cancel: &CancelSignal,
+    ) -> LifecycleExecutionResult {
+        if cancel.is_cancelled() {
+            return aggregate_result(
+                &prepared.plan,
+                operation_id,
+                vec![(cancelled_item(&prepared.plan), false)],
+            );
+        }
+        if let Err(error) = self.revalidate(prepared) {
+            return failed_result(
+                &prepared.plan,
+                operation_id,
+                format!("Revalidation failed before execution: {error}"),
+            );
+        }
+        let recorded_at = format_timestamp(now()).unwrap_or_else(|_| "redacted".to_string());
+        let result = match prepared.mcp_action.as_ref() {
+            Some(crate::mcp::lifecycle::PreparedMcpAction::Mutate(mutation)) => {
+                let mut execution = mutation.as_ref().clone();
+                execution.operation_id = operation_id.to_string();
+                self.mcp_lifecycle.materialize(
+                    &execution,
+                    &prepared.executable_identities,
+                    &recorded_at,
+                )
+            }
+            Some(crate::mcp::lifecycle::PreparedMcpAction::RestoreBackup(backup_id)) => {
+                self.mcp_lifecycle.restore_backup(backup_id, &recorded_at)
+            }
+            Some(crate::mcp::lifecycle::PreparedMcpAction::KeepPartial) => {
+                return successful_acknowledgement(
+                    &prepared.plan,
+                    operation_id,
+                    "Keep partial MCP result",
+                    "Successful MCP client bindings were kept; no configurations changed.",
+                );
+            }
+            None => unreachable!("MCP execution requires a prepared MCP action"),
+        };
+        match result {
+            Ok(outcome) => mcp_execution_result(&prepared.plan, operation_id, outcome),
+            Err(error) => failed_result(
+                &prepared.plan,
+                operation_id,
+                format!("MCP lifecycle execution failed: {error}"),
+            ),
+        }
     }
 
     fn execute(
@@ -1079,6 +1258,12 @@ impl LifecycleService {
         operation_id: &str,
         cancel: &CancelSignal,
     ) -> LifecycleExecutionResult {
+        if prepared.skill_action.is_some() {
+            return self.execute_skill_action(prepared, operation_id, cancel);
+        }
+        if prepared.mcp_action.is_some() {
+            return self.execute_mcp_action(prepared, operation_id, cancel);
+        }
         if prepared.children.is_empty() {
             if let Err(error) = self.revalidate(prepared) {
                 return failed_result(
@@ -1197,10 +1382,14 @@ impl LifecycleService {
                 }
             }
             let mut outcome = if child.staged {
-                match prepare_plan(&self.workspace, self.manager_evidence.as_ref(), self.host.as_ref(), child.plan.request.clone(),
-                None,
-                0,
-                now(),) {
+                match prepare_plan(
+                    &self.workspace,
+                    self.planner_context(),
+                    child.plan.request.clone(),
+                    None,
+                    0,
+                    now(),
+                ) {
                     Ok(fresh)
                         if fresh.recipe_fingerprint == child.recipe_fingerprint
                             && matches!(
@@ -1561,6 +1750,15 @@ impl LifecycleService {
                     },
                 }
             }
+            LifecycleExecution::ManagedConfigMutation { .. } => LifecycleItemResult {
+                id: plan.canonical_id.clone(),
+                label,
+                status: LifecycleItemStatus::Failed,
+                receipt: None,
+                redacted_detail:
+                    "Managed configuration mutation requires its prepared runtime action."
+                        .to_string(),
+            },
             LifecycleExecution::VendorHandoff { handoff_target } => {
                 match self.executor.open_vendor_handoff(handoff_target) {
                     Ok(()) => LifecycleItemResult {
@@ -1939,6 +2137,7 @@ fn plan_can_cancel(plan: &LifecyclePlan) -> bool {
     match &plan.execution {
         LifecycleExecution::ManagedExecute { .. }
         | LifecycleExecution::SignedProductUpdate { .. }
+        | LifecycleExecution::ManagedConfigMutation { .. }
         | LifecycleExecution::ArchiveInstaller { .. } => true,
         LifecycleExecution::NativeInstaller { .. } => false,
         LifecycleExecution::Batch { items } => execution_sequence_can_cancel(items),
@@ -1952,6 +2151,7 @@ fn execution_sequence_can_cancel(items: &[LifecyclePlan]) -> bool {
         .find_map(|item| match &item.execution {
             LifecycleExecution::ManagedExecute { .. }
             | LifecycleExecution::SignedProductUpdate { .. }
+            | LifecycleExecution::ManagedConfigMutation { .. }
             | LifecycleExecution::ArchiveInstaller { .. } => Some(true),
             LifecycleExecution::NativeInstaller { .. } => Some(false),
             LifecycleExecution::Batch { items } => Some(execution_sequence_can_cancel(items)),
@@ -1961,6 +2161,103 @@ fn execution_sequence_can_cancel(items: &[LifecyclePlan]) -> bool {
         })
         .unwrap_or(false)
 }
+fn successful_acknowledgement(
+    plan: &LifecyclePlan,
+    operation_id: &str,
+    label: &str,
+    detail: &str,
+) -> LifecycleExecutionResult {
+    let receipt = receipt_id(plan);
+    LifecycleExecutionResult {
+        operation_id: operation_id.to_string(),
+        plan_digest: plan.digest.clone(),
+        status: LifecycleExecutionStatus::Success,
+        completed_steps: 1,
+        total_steps: 1,
+        can_cancel: false,
+        receipt: Some(receipt.clone()),
+        redacted_detail: detail.to_string(),
+        items: vec![LifecycleItemResult {
+            id: plan.canonical_id.clone(),
+            label: label.to_string(),
+            status: LifecycleItemStatus::Success,
+            receipt: Some(receipt),
+            redacted_detail: detail.to_string(),
+        }],
+        retry_actions: Vec::new(),
+        recovery_actions: Vec::new(),
+    }
+}
+
+fn skill_execution_result(
+    plan: &LifecyclePlan,
+    operation_id: &str,
+    outcome: SkillMutationOutcome,
+) -> LifecycleExecutionResult {
+    let items = outcome
+        .targets
+        .into_iter()
+        .map(|target| {
+            let recovery_required = target.status == TargetMutationStatus::RecoveryRequired;
+            let status = match target.status {
+                TargetMutationStatus::Installed
+                | TargetMutationStatus::Updated
+                | TargetMutationStatus::Restored
+                | TargetMutationStatus::NoOp
+                | TargetMutationStatus::KeptLocal
+                | TargetMutationStatus::DiffExported => LifecycleItemStatus::Success,
+                TargetMutationStatus::Skipped => LifecycleItemStatus::Skipped,
+                TargetMutationStatus::RolledBack
+                | TargetMutationStatus::Failed
+                | TargetMutationStatus::RecoveryRequired => LifecycleItemStatus::Failed,
+            };
+            let client = format!("{:?}", target.target.client).to_ascii_lowercase();
+            (
+                LifecycleItemResult {
+                    id: format!("{client}:{}", target.target.target_path),
+                    label: target.target.target_path,
+                    status,
+                    receipt: target.receipt_id,
+                    redacted_detail: target.redacted_detail,
+                },
+                recovery_required,
+            )
+        })
+        .collect();
+    aggregate_result(plan, operation_id, items)
+}
+
+fn mcp_execution_result(
+    plan: &LifecyclePlan,
+    operation_id: &str,
+    outcome: crate::mcp::lifecycle::McpMutationOutcome,
+) -> LifecycleExecutionResult {
+    let items = outcome
+        .targets
+        .into_iter()
+        .map(|target| {
+            let status = match target.status {
+                crate::mcp::lifecycle::McpTargetStatus::Success
+                | crate::mcp::lifecycle::McpTargetStatus::NoOp
+                | crate::mcp::lifecycle::McpTargetStatus::Restored => LifecycleItemStatus::Success,
+                crate::mcp::lifecycle::McpTargetStatus::Failed => LifecycleItemStatus::Failed,
+            };
+            let client = format!("{:?}", target.client).to_ascii_lowercase();
+            (
+                LifecycleItemResult {
+                    id: format!("{}:{client}", plan.resource_id),
+                    label: client,
+                    status,
+                    receipt: target.receipt_id,
+                    redacted_detail: target.redacted_detail,
+                },
+                false,
+            )
+        })
+        .collect();
+    aggregate_result(plan, operation_id, items)
+}
+
 fn aggregate_result(
     plan: &LifecyclePlan,
     operation_id: &str,
@@ -2249,7 +2546,8 @@ fn mapping_key(mapping: &ToolCatalogMapping) -> String {
 fn manager_keys(plan: &LifecyclePlan) -> Vec<String> {
     match &plan.execution {
         LifecycleExecution::ManagedExecute { .. }
-        | LifecycleExecution::SignedProductUpdate { .. } => plan
+        | LifecycleExecution::SignedProductUpdate { .. }
+        | LifecycleExecution::ManagedConfigMutation { .. } => plan
             .mapping_id
             .split(':')
             .next()
@@ -2317,7 +2615,10 @@ mod test_support {
         collections::{BTreeMap, HashMap},
         fs,
         path::PathBuf,
-        sync::{Arc, LazyLock, Mutex},
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc, LazyLock, Mutex,
+        },
         time::UNIX_EPOCH,
     };
 
@@ -2330,10 +2631,251 @@ mod test_support {
             executor::{LifecycleExecutionPort, ManagedExecutionResult},
             source_probe::{SourceProbe, SourceProbeEvidence},
         },
-        ports::{HostExecutableResolver, ProcessLiveness, SnapshotStore},
+        ports::{
+            HostExecutableResolver, McpLifecyclePort, ProcessLiveness, SkillLifecyclePort,
+            SnapshotStore,
+        },
         storage::{OperationLogEntry, SnapshotBundle, StorageHealth},
         CoreError,
     };
+
+    #[derive(Default)]
+    pub(super) struct TestSkillLifecycle {
+        catalog: Mutex<Option<crate::skill_catalog::VerifiedSkillCatalog>>,
+        catalog_loads: AtomicUsize,
+        materialize_calls: AtomicUsize,
+        cleanup_calls: AtomicUsize,
+        recovery_calls: AtomicUsize,
+        recovery_failures: AtomicUsize,
+    }
+
+    impl TestSkillLifecycle {
+        pub(super) fn authenticated(recovery_failures: usize) -> Self {
+            Self {
+                catalog: Mutex::new(Some(
+                    crate::skill_catalog::load_current_authenticated_catalog(&PathBuf::new())
+                        .expect("bundled authenticated skill catalog"),
+                )),
+                recovery_failures: AtomicUsize::new(recovery_failures),
+                ..Self::default()
+            }
+        }
+
+        pub(super) fn rotate_catalog_trust(&self) {
+            let mut catalog = self.catalog.lock().expect("skill catalog");
+            let catalog = catalog.as_mut().expect("authenticated skill catalog");
+            catalog.catalog.catalog_version += 1;
+            catalog.manifest.catalog_version = catalog.catalog.catalog_version;
+            catalog.payload_sha256 = "f".repeat(64);
+        }
+
+        pub(super) fn catalog_loads(&self) -> usize {
+            self.catalog_loads.load(Ordering::SeqCst)
+        }
+
+        pub(super) fn materialize_calls(&self) -> usize {
+            self.materialize_calls.load(Ordering::SeqCst)
+        }
+
+        pub(super) fn cleanup_calls(&self) -> usize {
+            self.cleanup_calls.load(Ordering::SeqCst)
+        }
+
+        pub(super) fn recovery_calls(&self) -> usize {
+            self.recovery_calls.load(Ordering::SeqCst)
+        }
+    }
+
+    impl SkillLifecyclePort for TestSkillLifecycle {
+        fn load_authenticated_catalog(
+            &self,
+        ) -> Result<crate::skill_catalog::VerifiedSkillCatalog, CoreError> {
+            self.catalog_loads.fetch_add(1, Ordering::SeqCst);
+            self.catalog
+                .lock()
+                .expect("skill catalog")
+                .clone()
+                .ok_or_else(|| {
+                    CoreError::LifecycleEvidenceChanged(
+                        "skill lifecycle runtime is unavailable".into(),
+                    )
+                })
+        }
+        fn load_managed_receipts(
+            &self,
+            _skill_id: &str,
+        ) -> Result<Vec<(String, crate::skill_lifecycle::ManagedSkillReceipt)>, CoreError> {
+            Ok(Vec::new())
+        }
+        fn load_available_backups(
+            &self,
+            _skill_id: &str,
+        ) -> Result<Vec<crate::skill_lifecycle::SkillBackupReceipt>, CoreError> {
+            Ok(Vec::new())
+        }
+        fn resolve(
+            &self,
+            source: &crate::skill_lifecycle::SkillSourceSpec,
+            _cancel: &crate::feasibility::process_supervisor::CancelSignal,
+        ) -> Result<crate::skill_lifecycle::SkillStagingEvidence, CoreError> {
+            if self.catalog.lock().expect("skill catalog").is_none() {
+                return Err(CoreError::LifecycleEvidenceChanged(
+                    "skill lifecycle runtime is unavailable".into(),
+                ));
+            }
+            Ok(crate::skill_lifecycle::SkillStagingEvidence {
+                private_staging_path: "fixture-private-staging".to_string(),
+                tree_sha256: source.tree_sha256.clone(),
+                file_count: 1,
+                total_bytes: 1,
+                manifest: crate::skill_lifecycle::SkillManifestEvidence {
+                    name: "Frontend Design".to_string(),
+                    description: "Fixture staged skill".to_string(),
+                },
+                files: vec![crate::skill_lifecycle::StagedFileEvidence {
+                    path: "SKILL.md".to_string(),
+                    git_mode: "100644".to_string(),
+                    size_bytes: 1,
+                    sha256: "a".repeat(64),
+                }],
+                risk: crate::skill_lifecycle::SkillRiskEvidence::default(),
+            })
+        }
+        fn cleanup(
+            &self,
+            _evidence: &crate::skill_lifecycle::SkillStagingEvidence,
+        ) -> Result<(), CoreError> {
+            self.cleanup_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+        fn materialize(
+            &self,
+            _prepared: &crate::skill_lifecycle::PreparedSkillMutation,
+            _policy: crate::skill_lifecycle::PartialFailurePolicy,
+            _recorded_at: &str,
+        ) -> Result<crate::skill_lifecycle::SkillMutationOutcome, CoreError> {
+            self.materialize_calls.fetch_add(1, Ordering::SeqCst);
+            Err(CoreError::LifecycleEvidenceChanged(
+                "test skill lifecycle cannot mutate".into(),
+            ))
+        }
+        fn export_diff(
+            &self,
+            _prepared: &crate::skill_lifecycle::PreparedSkillMutation,
+        ) -> Result<crate::skill_lifecycle::SkillMutationOutcome, CoreError> {
+            Err(CoreError::LifecycleEvidenceChanged(
+                "skill lifecycle runtime is unavailable".into(),
+            ))
+        }
+        fn restore_backup(
+            &self,
+            _backup_id: &str,
+            _recorded_at: &str,
+        ) -> Result<crate::skill_lifecycle::SkillTargetOutcome, CoreError> {
+            Err(CoreError::LifecycleEvidenceChanged(
+                "skill lifecycle runtime is unavailable".into(),
+            ))
+        }
+        fn recover_interrupted(
+            &self,
+            _recorded_at: &str,
+        ) -> Result<Vec<crate::skill_lifecycle::SkillTargetOutcome>, CoreError> {
+            self.recovery_calls.fetch_add(1, Ordering::SeqCst);
+            if self
+                .recovery_failures
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
+                    remaining.checked_sub(1)
+                })
+                .is_ok()
+            {
+                return Err(CoreError::LifecycleEvidenceChanged(
+                    "fixture Skill recovery failure".to_string(),
+                ));
+            }
+            Ok(Vec::new())
+        }
+    }
+
+    #[derive(Default)]
+    pub(super) struct TestMcpLifecycle {
+        recovery_calls: AtomicUsize,
+        recovery_failures: AtomicUsize,
+    }
+
+    impl TestMcpLifecycle {
+        pub(super) fn with_recovery_failures(recovery_failures: usize) -> Self {
+            Self {
+                recovery_calls: AtomicUsize::new(0),
+                recovery_failures: AtomicUsize::new(recovery_failures),
+            }
+        }
+
+        pub(super) fn recovery_calls(&self) -> usize {
+            self.recovery_calls.load(Ordering::SeqCst)
+        }
+    }
+
+    impl McpLifecyclePort for TestMcpLifecycle {
+        fn client_config_path(&self, _client: &crate::domain::mcp::McpClientName) -> PathBuf {
+            PathBuf::new()
+        }
+        fn compile_stdio(
+            &self,
+            _command: &str,
+            _args: &[String],
+        ) -> Result<Option<CompiledManagerCommand>, CoreError> {
+            Ok(None)
+        }
+        fn config_digest(&self, _path: &std::path::Path) -> Result<Option<String>, CoreError> {
+            Ok(None)
+        }
+        fn load_available_backups(
+            &self,
+            _server_id: &str,
+        ) -> Result<Vec<crate::mcp::lifecycle::McpBackupReceipt>, CoreError> {
+            Ok(Vec::new())
+        }
+        fn load_backup(
+            &self,
+            _backup_id: &str,
+        ) -> Result<Option<crate::mcp::lifecycle::McpBackupReceipt>, CoreError> {
+            Ok(None)
+        }
+        fn materialize(
+            &self,
+            _prepared: &crate::mcp::lifecycle::PreparedMcpMutation,
+            _identities: &[ExecutableIdentity],
+            _recorded_at: &str,
+        ) -> Result<crate::mcp::lifecycle::McpMutationOutcome, CoreError> {
+            Err(CoreError::LifecycleEvidenceChanged(
+                "MCP lifecycle runtime is unavailable".into(),
+            ))
+        }
+        fn restore_backup(
+            &self,
+            _backup_id: &str,
+            _recorded_at: &str,
+        ) -> Result<crate::mcp::lifecycle::McpMutationOutcome, CoreError> {
+            Err(CoreError::LifecycleEvidenceChanged(
+                "MCP lifecycle runtime is unavailable".into(),
+            ))
+        }
+        fn recover_interrupted(&self, _recorded_at: &str) -> Result<(), CoreError> {
+            self.recovery_calls.fetch_add(1, Ordering::SeqCst);
+            if self
+                .recovery_failures
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
+                    remaining.checked_sub(1)
+                })
+                .is_ok()
+            {
+                return Err(CoreError::LifecycleEvidenceChanged(
+                    "fixture MCP recovery failure".to_string(),
+                ));
+            }
+            Ok(())
+        }
+    }
 
     pub(super) struct TestHost;
 
@@ -2433,6 +2975,7 @@ mod test_support {
         path: PathBuf,
         snapshot: Mutex<Option<SnapshotBundle>>,
         receipts: Mutex<BTreeMap<String, OperationLogEntry>>,
+        load_receipt_calls: AtomicUsize,
     }
 
     impl TestSnapshotStore {
@@ -2451,6 +2994,10 @@ mod test_support {
                     })
                 })
                 .clone()
+        }
+
+        pub(super) fn load_receipt_calls(&self) -> usize {
+            self.load_receipt_calls.load(Ordering::SeqCst)
         }
     }
 
@@ -2532,6 +3079,7 @@ mod test_support {
         }
 
         fn load_lifecycle_receipts(&self) -> Result<Vec<OperationLogEntry>, CoreError> {
+            self.load_receipt_calls.fetch_add(1, Ordering::SeqCst);
             Ok(self
                 .receipts
                 .lock()

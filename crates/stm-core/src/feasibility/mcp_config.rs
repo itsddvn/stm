@@ -109,6 +109,13 @@ fn parse_entries(client: McpClientName, entries: Vec<(String, TomlValue)>) -> Mc
                 continue;
             }
         };
+        let binding = McpClientBindingRecord::from_server(
+            client.clone(),
+            parsed.binding_state.clone(),
+            McpBindingScope::Global,
+            parsed.server.name.clone(),
+            &parsed.server,
+        );
 
         let key = logical_key(&parsed.server);
         logical
@@ -122,20 +129,12 @@ fn parse_entries(client: McpClientName, entries: Vec<(String, TomlValue)>) -> Mc
                 {
                     binding.state = merge_binding_state(&binding.state, &parsed.binding_state);
                 } else {
-                    existing.clients.push(McpClientBindingRecord {
-                        client: client.clone(),
-                        state: parsed.binding_state.clone(),
-                        scope: McpBindingScope::Global,
-                    });
+                    existing.clients.push(binding.clone());
                 }
             })
             .or_insert_with(|| {
                 let mut server = parsed.server;
-                server.clients = vec![McpClientBindingRecord {
-                    client: client.clone(),
-                    state: parsed.binding_state,
-                    scope: McpBindingScope::Global,
-                }];
+                server.clients = vec![binding];
                 server
             });
     }
@@ -205,6 +204,7 @@ fn parse_server(name: &str, value: &TomlValue) -> Result<ParsedServer, String> {
             } else {
                 AuthReferenceState::ReferenceConfigured
             },
+            auth_required: false,
             health: McpHealthState::Unknown,
             last_checked: "2026-08-20T00:00:00Z".to_string(),
             state: InventoryState::ManagedCurrent,

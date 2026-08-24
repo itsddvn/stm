@@ -126,7 +126,7 @@ export function createDesktopRuntimeController({
   }
 
   async function triggerRefresh() {
-    const next = await client.startRefresh();
+    const next = await withRuntimeOperations(await client.startRefresh());
     runtime.latestView = next;
     runtime.refreshInProgress = true;
     onView(next);
@@ -146,8 +146,9 @@ export function createDesktopRuntimeController({
     runtime.currentOperationId = status.operationId ?? undefined;
 
     if (status.snapshot) {
-      runtime.latestView = status.snapshot;
-      onView(status.snapshot);
+      const snapshot = await withRuntimeOperations(status.snapshot);
+      runtime.latestView = snapshot;
+      onView(snapshot);
     }
 
     if (!status.inProgress && statusPollTimer) {
@@ -157,6 +158,11 @@ export function createDesktopRuntimeController({
       syncAutoRefresh();
     }
   }
+  async function withRuntimeOperations(view: AppViewModel): Promise<AppViewModel> {
+    const operations = await client.listOperations();
+    return { ...view, operations };
+  }
+
 
   function syncAutoRefresh() {
     if (autoRefreshTimer) {

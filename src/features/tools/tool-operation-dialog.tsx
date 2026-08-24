@@ -28,7 +28,7 @@ export function ToolOperationDialog({ tool, open, onClose }: { tool: ToolViewMod
       footer={(
         <>
           <button className="secondary-button" type="button" onClick={onClose}>{t("common.close")}</button>
-          {lifecycle.stage === "review" && lifecycle.plan && !guidanceOnly && !actionBlocked ? <button className="primary-button" type="button" disabled={!lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}><AppIcon name="run" />{t("common.start")}</button> : null}
+          {lifecycle.stage === "review" && lifecycle.plan && !guidanceOnly && !actionBlocked ? <button className="primary-button" type="button" disabled={lifecycle.starting || !lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}><AppIcon name="run" />{t("common.start")}</button> : null}
           {lifecycle.stage === "progress" && lifecycle.result?.canCancel ? <button className="secondary-button" type="button" onClick={() => void lifecycle.cancel()}>{t("common.cancelOperation")}</button> : null}
           {lifecycle.stage === "progress" ? <button className="primary-button" type="button" onClick={() => void lifecycle.refreshStatus()}>{t("common.refreshStatus")}</button> : null}
         </>

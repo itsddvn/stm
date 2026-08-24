@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "mappings": [
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "aliases": ["filesystem", "server-filesystem"],
+      "transport": "stdio",
+      "commandOrUrl": "npx",
+      "argsPrefix": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "allowAbsoluteTrailingArgs": true,
+      "capabilities": ["resources", "tools"],
+      "clients": ["codex", "claude_code", "cursor"],
+      "authRequired": false,
+      "authReferences": []
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "aliases": ["github", "github-mcp"],
+      "transport": "streamable_http",
+      "commandOrUrl": "https://api.githubcopilot.com/mcp/",
+      "argsPrefix": [],
+      "allowAbsoluteTrailingArgs": false,
+      "capabilities": ["tools", "prompts"],
+      "clients": ["codex", "claude_code", "cursor"],
+      "authRequired": true,
+      "authReferences": [
+        {
+          "kind": "env_var",
+          "reference": "GITHUB_COPILOT_TOKEN"
+        }
+      ]
+    }
+  ]
+}

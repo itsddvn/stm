@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { AppViewModel, McpServerViewModel } from "../../../contracts/ui/view-model-contract";
+import type { LifecyclePlanRequest } from "../../../contracts/ui/lifecycle-contract";
 import { AppIcon } from "../../components/app-icon";
 import { EmptyState } from "../../components/empty-state";
 import { LoadingTable } from "../../components/loading-table";
@@ -47,6 +48,13 @@ export function McpPage({ view }: { view: AppViewModel }) {
       : dialog.mode === "configure" ? dialog.server.primaryAction
         : dialog.mode === "toggle" ? dialog.server.toggleAction
           : dialog.server.removeAction;
+  const directRequest = useMemo<LifecyclePlanRequest | undefined>(() => (
+    dialog && dialog.mode !== "add" && dialogAction ? {
+      resourceKind: "mcp",
+      action: dialogAction.id.split(".").at(-1) ?? "review",
+      resourceId: dialog.server.id,
+    } : undefined
+  ), [dialog, dialogAction]);
 
   return (
     <>
@@ -72,7 +80,7 @@ export function McpPage({ view }: { view: AppViewModel }) {
           {selected ? <McpDetailPanel server={selected} onConfigure={() => setDialog({ mode: "configure", server: selected })} onToggle={() => setDialog({ mode: "toggle", server: selected })} onRemove={() => setDialog({ mode: "remove", server: selected })} /> : null}
         </div>
       )}
-      {dialog ? <SourceInstallDialog kind="mcp" open onClose={() => setDialog(null)} initialUrl={initialUrl} title={dialogTitle} mcpAction={dialogAction} mcpServerId={dialogServer?.id} /> : null}
+      {dialog ? <SourceInstallDialog kind="mcp" open onClose={() => setDialog(null)} initialUrl={initialUrl} title={dialogTitle} mcpAction={dialogAction} mcpServerId={dialogServer?.id} directRequest={directRequest} /> : null}
     </>
   );
 }

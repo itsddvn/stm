@@ -10,11 +10,17 @@ build = "build.rs"
 tauri-build.workspace = true
 
 [dependencies]
+minisign-verify.workspace = true
+reqwest.workspace = true
+semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tauri.workspace = true
 tauri-plugin-single-instance.workspace = true
 tauri-plugin-dialog.workspace = true
+tauri-plugin-updater.workspace = true
+time.workspace = true
 stm-core = { path = "../crates/stm-core" }
 stm-runtime = { path = "../crates/stm-runtime" }
 

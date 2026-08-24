@@ -321,8 +321,15 @@ impl From<&ApplicationUpdateRecord> for UpdateViewModelDto {
                 &format!("Select {}", value.name),
             )),
         };
-        let review_action = match value.resource_type {
-            ApplicationUpdateKind::Product => Some(enabled_action(
+        let review_action = match (&value.resource_type, &value.execution_mode) {
+            (ApplicationUpdateKind::Product, UpdateExecutionMode::DetectOnly) => {
+                Some(disabled_action(
+                    "product_update.preview",
+                    "Product Update Unavailable",
+                    "action.manager.unavailable",
+                ))
+            }
+            (ApplicationUpdateKind::Product, _) => Some(enabled_action(
                 "product_update.preview",
                 "Review Product Update",
             )),
@@ -565,5 +572,33 @@ fn disabled_action(id: &str, label: &str, reason: &str) -> PresentationActionDto
         enabled: false,
         disabled_reason_code: Some(reason.to_string()),
         presentation_only: true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_only_product_update_has_no_executable_review_action() {
+        let update = ApplicationUpdateRecord {
+            id: "update-product".into(),
+            resource_type: ApplicationUpdateKind::Product,
+            name: "STM".into(),
+            current: "0.1.0".into(),
+            target: "0.1.0".into(),
+            execution_mode: UpdateExecutionMode::DetectOnly,
+            selected: false,
+            risk: "No executable signed product update is available".into(),
+        };
+
+        let view = UpdateViewModelDto::from(&update);
+
+        let action = view.review_action.expect("product review action");
+        assert!(!action.enabled);
+        assert_eq!(
+            action.disabled_reason_code.as_deref(),
+            Some("action.manager.unavailable")
+        );
     }
 }

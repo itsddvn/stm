@@ -73,6 +73,9 @@ pub enum LifecycleExecution {
         executable: String,
         argv: Vec<String>,
     },
+    ManagedConfigMutation {
+        action: String,
+    },
     SignedProductUpdate {
         executable: String,
         argv: Vec<String>,

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "targets": [
+    {
+      "platform": "macos",
+      "architecture": "aarch64",
+      "rustTarget": "aarch64-apple-darwin",
+      "runner": "macos-15",
+      "minimumVersion": "13.0",
+      "updaterKey": "darwin-aarch64",
+      "bundles": ["app", "dmg"],
+      "lifecycleTier": "supported"
+    },
+    {
+      "platform": "macos",
+      "architecture": "x86_64",
+      "rustTarget": "x86_64-apple-darwin",
+      "runner": "macos-15-intel",
+      "minimumVersion": "13.0",
+      "updaterKey": "darwin-x86_64",
+      "bundles": ["app", "dmg"],
+      "lifecycleTier": "supported"
+    },
+    {
+      "platform": "windows",
+      "architecture": "x86_64",
+      "rustTarget": "x86_64-pc-windows-msvc",
+      "runner": "windows-2025",
+      "minimumVersion": "10 22H2",
+      "updaterKey": "windows-x86_64",
+      "bundles": ["msi", "nsis"],
+      "lifecycleTier": "supported"
+    },
+    {
+      "platform": "linux",
+      "architecture": "x86_64",
+      "rustTarget": "x86_64-unknown-linux-gnu",
+      "runner": "ubuntu-24.04",
+      "minimumVersion": "Ubuntu 22.04 / glibc 2.35",
+      "updaterKey": "linux-x86_64",
+      "bundles": ["appimage", "deb"],
+      "lifecycleTier": "supported"
+    },
+    {
+      "platform": "windows",
+      "architecture": "aarch64",
+      "rustTarget": "aarch64-pc-windows-msvc",
+      "runner": "windows-11-arm",
+      "minimumVersion": "11 24H2",
+      "updaterKey": "windows-aarch64",
+      "bundles": ["nsis"],
+      "lifecycleTier": "experimental"
+    },
+    {
+      "platform": "linux",
+      "architecture": "aarch64",
+      "rustTarget": "aarch64-unknown-linux-gnu",
+      "runner": "ubuntu-24.04-arm",
+      "minimumVersion": "Ubuntu 22.04 / glibc 2.35",
+      "updaterKey": "linux-aarch64",
+      "bundles": ["appimage", "deb"],
+      "lifecycleTier": "experimental"
+    }
+  ]
+}

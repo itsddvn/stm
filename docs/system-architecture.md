@@ -39,9 +39,10 @@ The core crate depends on neither Tauri nor concrete SQLite, HTTP, process, or O
 - Provider inventory is detected separately for Homebrew, Bun, Node, and npm. Canonical Homebrew binaries under `/opt/homebrew` or `/usr/local` are approved under the accepted same-UID threat boundary; Bun approval is limited to the exact user-scoped `.bun/bin` binary or the pinned STM runtime-provider path.
 - Deterministic manager fixtures cover parser and policy tests. Disposable CI runners separately exercise real Homebrew formula/cask, npm, APT, DNF, and WinGet install/rescan/no-op/uninstall behavior.
 - Global skill scanning is bounded to configured global roots and rejects project-local roots plus symlink escapes.
-- MCP discovery is read-only and normalizes Codex, Claude Code, and Cursor fixtures into one canonical binding model with duplicate logical-binding collapse and per-client enablement state.
-- MCP auth values are never surfaced. Portable export carries only bounded credential reference IDs and drops file-backed references.
-- Missing MCP auth references downgrade the server to a blocked/read-only state rather than exposing secret material.
+- MCP discovery reads only bounded regular files beneath the canonical user home and normalizes Codex, Claude Code, and Cursor configurations into canonical servers with client-specific transport, command or endpoint, arguments, capabilities, auth references, scope, and per-client enablement state; duplicate logical bindings collapse.
+- MCP auth values are never surfaced or persisted. Portable export carries only bounded credential reference IDs, drops file-backed references, and unavailable references block lifecycle planning.
+- MCP mutations resolve approved declarative mappings, bind every client config digest into an immutable consent plan, acquire persistent cross-process file locks, revalidate all targets before the first write, and use atomic replacement with per-client outcomes.
+- Receipt-backed MCP backups are authenticated XChaCha20-Poly1305 envelopes. Runtime adapters create and retrieve the backup key through macOS Keychain, Windows Credential Manager, or Linux Secret Service; plaintext credentials never enter backup artifacts or SQLite.
 
 ## Elevation
 
@@ -74,6 +75,13 @@ The core crate depends on neither Tauri nor concrete SQLite, HTTP, process, or O
 - Unknown skills and MCP resources stay review-only until the local machine resolves them against its own trust boundaries.
 - Export requires a fresh authoritative scan and omits provider preferences, raw secrets, file-backed auth references, commands, and receipts.
 - The only authorized side-by-side migration recipe is Codex npm → Homebrew. Fresh server eligibility requires npm ownership plus an approved Homebrew provider; target install, exact prefix/version activation, checkpoint, and optional npm cleanup execute in that order. Shared Codex config is not copied. All other migrations remain fail-closed.
+
+## MCP lifecycle
+
+- Approved stdio add plans come only from the versioned MCP mapping catalog. Absolute resource roots remain typed arguments, executable identities are locked before consent, and health executes only the MCP `initialize` exchange under a bounded environment, timeout, and output limit.
+- Reviewed remote add and update plans must match approved endpoint, capability, supported-client, and credential-reference metadata. Unknown endpoints and unavailable references remain review-only.
+- Existing configure, enable, disable, and remove actions open a direct immutable plan; only add or source-changing flows require source analysis. Retry, keep-partial, and rollback actions always prepare fresh evidence and consent.
+- Recovery restores an encrypted backup only when the current target still matches the replacement digest. User changes, backup tampering, symlink escapes, stale plans, and concurrent overlapping writes fail closed without overwrite.
 
 ## Catalog and update separation
 

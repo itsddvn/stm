@@ -15,7 +15,16 @@
     "verify:ui-contract": "node --import tsx scripts/verify-ui-contract.ts",
     "verify:phase-two-foundation": "node scripts/verify-phase-two-foundation.mjs",
     "verify:phase-three-core": "node scripts/verify-phase-three-core.mjs",
+    "verify:skill-catalog": "node --import tsx scripts/verify-skill-catalog.ts",
+    "verify:mcp-catalog": "node --import tsx scripts/verify-mcp-catalog.ts",
     "verify:phase-four-desktop": "pnpm verify:ui-contract && pnpm typecheck && pnpm test && pnpm test:desktop-integration && cargo test -p stm-core application::service && cargo test -p stm-desktop && pnpm tauri:build",
+    "verify:no-secrets": "node --import tsx scripts/verify-no-secrets.ts",
+    "verify:release-contract": "node --import tsx scripts/verify-release-contract.ts",
+    "verify:release-artifacts": "node --import tsx scripts/verify-release-artifacts.ts",
+    "verify:release-tooling": "node scripts/verify-release-tooling.mjs",
+    "verify:release-version": "node scripts/verify-release-version.mjs",
+    "release:config": "node --import tsx scripts/prepare-release-config.ts",
+    "sign:skill-catalog": "node --import tsx scripts/sign-skill-catalog.ts",
     "lock:ui-contract": "node --import tsx scripts/verify-ui-contract.ts --write-lock"
   },
   "dependencies": {
