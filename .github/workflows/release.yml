@@ -11,6 +11,7 @@ on:
     tags: ["v*"]
 
 permissions:
+  actions: read
   contents: write
   id-token: write
   attestations: write

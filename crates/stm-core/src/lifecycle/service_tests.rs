@@ -21,8 +21,10 @@ mod tests {
             executor::ManagedExecutionResult,
             source_probe::SourceProbeEvidence,
         },
-        domain::lifecycle::LifecycleChildIntent,
     };
+
+    #[cfg(target_os = "macos")]
+    use crate::domain::lifecycle::LifecycleChildIntent;
 
     #[derive(Default)]
     struct SuccessfulExecutor {
@@ -64,11 +66,13 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
     #[derive(Default)]
     struct FailsNativeInstallerExecutor {
         managed_calls: AtomicUsize,
     }
 
+    #[cfg(target_os = "macos")]
     impl LifecycleExecutionPort for FailsNativeInstallerExecutor {
         fn execute_managed(
             &self,
@@ -97,11 +101,13 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
     #[derive(Default)]
     struct FailsBunArchiveExecutor {
         archive_calls: AtomicUsize,
     }
 
+    #[cfg(target_os = "macos")]
     impl LifecycleExecutionPort for FailsBunArchiveExecutor {
         fn execute_managed(
             &self,
@@ -256,8 +262,10 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
     struct MissingManagerEvidence;
 
+    #[cfg(target_os = "macos")]
     impl ManagerEvidencePort for MissingManagerEvidence {
         fn inspect(
             &self,

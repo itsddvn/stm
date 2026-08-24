@@ -114,7 +114,7 @@ impl FixtureWorkspace {
             let base = std::env::var_os("XDG_DATA_HOME")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| home.join(".local").join("share"));
-            return Ok(base.join("tools-manager"));
+            Ok(base.join("tools-manager"))
         }
     }
 
