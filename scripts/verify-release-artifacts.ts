@@ -90,8 +90,11 @@ async function main(): Promise<void> {
   if (!artifacts.some((path) => path.endsWith(".sig"))) {
     throw new Error("no signed updater artifact found");
   }
-  if (artifacts.some((path) => !basename(path).includes(expectedVersion) && !basename(path).startsWith("latest.json"))) {
-    throw new Error("release artifact filename does not contain the release version");
+  if (artifacts.some((path) =>
+    installerSuffixes.some((suffix) => path.endsWith(suffix))
+    && !basename(path).includes(expectedVersion)
+  )) {
+    throw new Error("release installer filename does not contain the release version");
   }
   if (manifestArgument) await verifyUpdaterManifest(resolve(manifestArgument));
   const digests = await Promise.all(artifacts.sort().map(digest));

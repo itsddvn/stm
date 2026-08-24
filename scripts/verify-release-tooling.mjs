@@ -30,6 +30,8 @@ async function main() {
     await mkdir(artifacts);
     await writeFile(join(artifacts, "STM_0.1.0_amd64.AppImage"), "artifact\n");
     await writeFile(join(artifacts, "STM_0.1.0_amd64.AppImage.sig"), "RWTGZml4dHVyZVNpZ25hdHVyZUJ5dGVzRm9yUmVsZWFzZVZlcmlmaWNhdGlvbjAx\n");
+    await writeFile(join(artifacts, "STM_amd64.AppImage.tar.gz"), "updater\n");
+    await writeFile(join(artifacts, "STM_amd64.AppImage.tar.gz.sig"), "RWTGZml4dHVyZVNpZ25hdHVyZUJ5dGVzRm9yUmVsZWFzZVZlcmlmaWNhdGlvbjAy\n");
     const manifestPath = join(artifacts, "latest.json");
     await writeFile(manifestPath, JSON.stringify({
       version: "0.1.0",
@@ -41,7 +43,7 @@ async function main() {
       },
     }));
     const success = await invoke("scripts/verify-release-artifacts.ts", [artifacts, "0.1.0", manifestPath]);
-    if (success.code !== 0 || !success.stdout.includes("Verified 3 release artifacts")) {
+    if (success.code !== 0 || !success.stdout.includes("Verified 5 release artifacts")) {
       throw new Error(`valid release artifacts failed verification: ${success.stderr}`);
     }
     const downgrade = await invoke("scripts/verify-release-artifacts.ts", [artifacts, "0.2.0", manifestPath]);
