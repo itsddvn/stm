@@ -306,7 +306,7 @@ jobs:
           }
       - name: Verify local signed artifacts and checksums
         shell: bash
-        run: pnpm verify:release-artifacts "target/${{ matrix.target }}/release/bundle" "$RELEASE_TAG"
+        run: pnpm verify:release-artifacts "target/${{ matrix.target }}/release/bundle" "${RELEASE_TAG#v}"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: target/${{ matrix.target }}/release/bundle/**/*
@@ -352,7 +352,7 @@ jobs:
         env:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
         run: cargo run --locked -p stm-release-verifier -- draft-assets draft-assets/latest.json darwin-aarch64 darwin-x86_64 windows-x86_64 linux-x86_64
-      - run: pnpm verify:release-artifacts draft-assets "$RELEASE_TAG" draft-assets/latest.json draft-assets/release-checksums.json
+      - run: pnpm verify:release-artifacts draft-assets "${RELEASE_TAG#v}" draft-assets/latest.json draft-assets/release-checksums.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: stm-aggregate-updater-${{ env.RELEASE_TAG }}
