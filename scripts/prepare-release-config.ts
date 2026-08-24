@@ -18,11 +18,26 @@ async function readBoundedJson(path: string, maximumBytes: number): Promise<Reco
 
 function updaterPublicKey(): string {
   const value = process.env.TAURI_UPDATER_PUBLIC_KEY?.trim();
-  if (!value || value.length < 40 || value.length > 2048 || /PRIVATE|SECRET/i.test(value)) {
-    throw new Error("TAURI_UPDATER_PUBLIC_KEY must contain the approved Minisign public key");
+  if (!value || value.length < 40 || value.length > 2048 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+    throw new Error("TAURI_UPDATER_PUBLIC_KEY must contain the Tauri-encoded Minisign public key");
   }
-  if ([...value].some((character) => character < " " && character !== "\n" && character !== "\r")) {
-    throw new Error("TAURI_UPDATER_PUBLIC_KEY contains control characters");
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.toString("base64") !== value) {
+    throw new Error("TAURI_UPDATER_PUBLIC_KEY is not canonical base64");
+  }
+  const document = decoded.toString("utf8");
+  if (/PRIVATE|SECRET/i.test(document)) {
+    throw new Error("TAURI_UPDATER_PUBLIC_KEY contains secret material");
+  }
+  const canonicalDocument = document.endsWith("\n") ? document.slice(0, -1) : document;
+  const lines = canonicalDocument.split("\n");
+  const commentId = lines[0]?.match(/^untrusted comment: minisign public key: ([A-Fa-f0-9]{8,16})$/)?.[1];
+  if (
+    lines.length !== 2
+    || !commentId
+    || !/^RW[A-Za-z0-9+/=]{40,128}$/.test(lines[1] ?? "")
+  ) {
+    throw new Error("TAURI_UPDATER_PUBLIC_KEY has an invalid public-key document");
   }
   return value;
 }

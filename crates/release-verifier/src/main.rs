@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use minisign_verify::{PublicKey, Signature};
 use serde::Deserialize;
 
@@ -142,12 +143,33 @@ fn usage() -> String {
 }
 
 fn parse_public_key(value: &str) -> Result<PublicKey, String> {
-    let encoded = value
-        .lines()
-        .map(str::trim)
-        .find(|line| line.starts_with("RW"))
-        .ok_or_else(|| "updater public key has no Minisign payload".to_string())?;
+    if value.starts_with("RW") && !value.contains(['\r', '\n']) && value.trim() == value {
+        return PublicKey::from_base64(value).map_err(|_| "updater public key is malformed".into());
+    }
+    let decoded = BASE64
+        .decode(value.trim())
+        .map_err(|_| "updater public key is neither Minisign text nor Tauri-encoded text")?;
+    if decoded.len() > 2048 {
+        return Err("decoded updater public key exceeds the accepted bound".into());
+    }
+    let document =
+        std::str::from_utf8(&decoded).map_err(|_| "decoded updater public key is not UTF-8")?;
+    let encoded = tauri_minisign_payload(document)
+        .ok_or_else(|| "updater public key has no canonical Minisign document".to_string())?;
     PublicKey::from_base64(encoded).map_err(|_| "updater public key is malformed".into())
+}
+
+fn tauri_minisign_payload(value: &str) -> Option<&str> {
+    let document = value.strip_suffix('\n').unwrap_or(value);
+    let (comment, key) = document.split_once('\n')?;
+    if key.contains('\n') {
+        return None;
+    }
+    let id = comment.strip_prefix("untrusted comment: minisign public key: ")?;
+    ((8..=16).contains(&id.len())
+        && id.bytes().all(|byte| byte.is_ascii_hexdigit())
+        && key.starts_with("RW"))
+    .then_some(key)
 }
 
 fn collect_assets(root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
@@ -260,5 +282,27 @@ mod tests {
         assert!(public_key
             .verify(&b"tampered"[..], &signature, false)
             .is_err());
+    }
+
+    #[test]
+    fn accepts_tauri_encoded_minisign_public_key() {
+        let document = "untrusted comment: minisign public key: 0123456789ABCD\nRWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3\n";
+        let encoded = BASE64.encode(document);
+        parse_public_key(&encoded).expect("Tauri-encoded public key");
+    }
+
+    #[test]
+    fn rejects_tauri_wrapper_with_trailing_secret_material() {
+        let document = "untrusted comment: minisign public key: 0123456789ABCDEF\nRWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3\nuntrusted comment: minisign secret key\nRWRleGFtcGxl\n";
+        let encoded = BASE64.encode(document);
+        assert!(parse_public_key(&encoded).is_err());
+    }
+
+    #[test]
+    fn rejects_noncanonical_tauri_wrappers() {
+        let key = "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3";
+        assert!(parse_public_key(&BASE64.encode(format!("{key}\n"))).is_err());
+        let padded = format!("untrusted comment: minisign public key: 0123456789ABCD\n {key}\n");
+        assert!(parse_public_key(&BASE64.encode(padded)).is_err());
     }
 }

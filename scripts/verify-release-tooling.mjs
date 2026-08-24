@@ -52,7 +52,8 @@ async function main() {
     const generated = join(temp, "tauri.release.generated.json");
     const missingKey = await invoke("scripts/prepare-release-config.ts", [generated], { TAURI_UPDATER_PUBLIC_KEY: "" });
     if (missingKey.code === 0) throw new Error("release config accepted a missing updater key");
-    const publicKey = "RWQ7jvN7JjQYdUjmdZmR2pAQzD5k5iER65fUn9J2b9v6YQfMTc1F8i4=";
+    const publicDocument = "untrusted comment: minisign public key: 0123456789ABCDEF\nRWQ7jvN7JjQYdUjmdZmR2pAQzD5k5iER65fUn9J2b9v6YQfMTc1F8i4=\n";
+    const publicKey = Buffer.from(publicDocument).toString("base64");
     const configured = await invoke("scripts/prepare-release-config.ts", [generated], { TAURI_UPDATER_PUBLIC_KEY: publicKey });
     if (configured.code !== 0 || configured.stdout.includes(publicKey)) {
       throw new Error("release config generation failed or exposed key material in output");
@@ -60,6 +61,11 @@ async function main() {
     const config = JSON.parse(await readFile(generated, "utf8"));
     if (config.plugins?.updater?.pubkey !== publicKey || config.bundle?.createUpdaterArtifacts !== true) {
       throw new Error("generated release config omitted updater trust or artifacts");
+    }
+    const secretWrapper = Buffer.from(`${publicDocument}untrusted comment: minisign secret key\nRWRleGFtcGxl\n`).toString("base64");
+    const secretBearing = await invoke("scripts/prepare-release-config.ts", [generated], { TAURI_UPDATER_PUBLIC_KEY: secretWrapper });
+    if (secretBearing.code === 0 || !secretBearing.stderr.includes("secret material")) {
+      throw new Error("release config accepted encoded secret material");
     }
     process.stdout.write("Release tooling behavioral verification passed.\n");
   } finally {

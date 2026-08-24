@@ -4133,6 +4133,7 @@ dependencies = [
 name = "stm-release-verifier"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "minisign-verify",
  "serde",
  "serde_json",
