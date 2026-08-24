@@ -89,6 +89,19 @@ impl PhaseThreeApplicationService {
         }
     }
 
+    pub fn new_runtime(project_root: impl Into<PathBuf>) -> Result<Self, CoreError> {
+        let workspace = FixtureWorkspace::new(project_root);
+        let skill_home = workspace.skill_home()?;
+        let database_path = workspace.runtime_data_dir()?.join("stm.sqlite");
+        let workspace = workspace
+            .with_db_path(database_path)
+            .with_skill_home(skill_home);
+        Ok(Self {
+            lifecycle: LifecycleService::new(workspace.clone()),
+            workspace,
+        })
+    }
+
     pub fn refresh_snapshot(&self) -> Result<AppViewModelDto, CoreError> {
         let (snapshot, _, warnings) = self.build_snapshot()?;
         Ok(self.to_app_view(&snapshot, &warnings))
@@ -391,15 +404,24 @@ impl PhaseThreeApplicationService {
             "Completed read-only MCP client discovery and redaction.",
         ));
         check_refresh_cancelled(is_cancelled, "mcp-discovered")?;
-        let operations: Vec<OperationLogEntry> = self
-            .workspace
-            .read_json("tests/fixtures/catalog/operations.json")?;
+        let operations: Vec<OperationLogEntry> = if self.workspace.has_skill_home_override() {
+            SqliteSnapshotStore::open(self.workspace.db_path())?
+                .0
+                .load_lifecycle_receipts()?
+        } else {
+            self.workspace
+                .read_json("tests/fixtures/catalog/operations.json")?
+        };
         let updates = build_application_updates(&inventory.tools, &skills.skills, &versions);
         let errors = self.collect_scan_errors(&skills, &mcp);
         let mut warnings = warnings_for_scan(&inventory, &skills, &mcp, &errors);
 
         let mut snapshot = SnapshotBundle {
-            generated_at: "2026-08-20T09:00:00+07:00".to_string(),
+            generated_at: if self.workspace.has_skill_home_override() {
+                crate::lifecycle::time::format_timestamp(std::time::SystemTime::now())?
+            } else {
+                "2026-08-20T09:00:00+07:00".to_string()
+            },
             catalog_version: catalog.version.clone(),
             freshness: inventory.freshness.clone(),
             tools: inventory.tools,

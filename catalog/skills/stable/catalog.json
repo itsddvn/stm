@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": 1,
+  "channel": "stable",
+  "skills": [
+    {
+      "id": "frontend-design",
+      "name": "Frontend Design",
+      "description": "Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one.",
+      "publisher": "anthropics",
+      "purposes": [
+        "frontend-design",
+        "ui-ux"
+      ],
+      "riskFlags": [],
+      "source": {
+        "repository": "https://github.com/anthropics/skills.git",
+        "subpath": "skills/frontend-design",
+        "commit": "0a64e398ec6bb34a494f0c347e8ccae53a862f8e",
+        "treeSha256": "ad1abb39b48c25c7c59c0294dd2d674cc32b60ca8c3c9650ef666a1e54ef5e9f"
+      },
+      "targets": [
+        {
+          "client": "Codex",
+          "relativePath": "frontend-design"
+        },
+        {
+          "client": "Claude Code",
+          "relativePath": "frontend-design"
+        },
+        {
+          "client": "AgentKit",
+          "relativePath": "frontend-design"
+        }
+      ]
+    }
+  ]
+}

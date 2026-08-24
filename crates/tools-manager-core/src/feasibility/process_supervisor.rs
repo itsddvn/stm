@@ -53,6 +53,17 @@ pub struct ExecutionOutcome {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RawExecutionOutcome {
+    pub status: ExecutionStatus,
+    pub exit_code: Option<i32>,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub truncated: bool,
+    pub elapsed_ms: u128,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionStatus {
     Completed,
@@ -104,6 +115,34 @@ impl AllowlistedProcessSupervisor {
         cancel: &CancelSignal,
         on_spawn: F,
     ) -> Result<ExecutionOutcome, CoreError>
+    where
+        F: FnOnce(u32) -> Result<(), CoreError>,
+    {
+        let outcome = self.execute_raw_with_spawn_callback(request, cancel, on_spawn)?;
+        Ok(ExecutionOutcome {
+            status: outcome.status,
+            exit_code: outcome.exit_code,
+            stdout: String::from_utf8_lossy(&outcome.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&outcome.stderr).into_owned(),
+            truncated: outcome.truncated,
+            elapsed_ms: outcome.elapsed_ms,
+        })
+    }
+
+    pub fn execute_raw(
+        &self,
+        request: &ExecutionRequest,
+        cancel: &CancelSignal,
+    ) -> Result<RawExecutionOutcome, CoreError> {
+        self.execute_raw_with_spawn_callback(request, cancel, |_| Ok(()))
+    }
+
+    pub fn execute_raw_with_spawn_callback<F>(
+        &self,
+        request: &ExecutionRequest,
+        cancel: &CancelSignal,
+        on_spawn: F,
+    ) -> Result<RawExecutionOutcome, CoreError>
     where
         F: FnOnce(u32) -> Result<(), CoreError>,
     {
@@ -173,23 +212,19 @@ impl AllowlistedProcessSupervisor {
                 let exit = child.wait().ok().and_then(|status| status.code());
                 break (ExecutionStatus::Cancelled, exit);
             }
-
             if limit_hit.load(Ordering::SeqCst) {
                 terminate_process_tree(&mut child);
                 let exit = child.wait().ok().and_then(|status| status.code());
                 break (ExecutionStatus::OutputLimitExceeded, exit);
             }
-
             if Instant::now() >= deadline {
                 terminate_process_tree(&mut child);
                 let exit = child.wait().ok().and_then(|status| status.code());
                 break (ExecutionStatus::TimedOut, exit);
             }
-
             if let Some(exit) = child.try_wait()? {
                 break (ExecutionStatus::Completed, exit.code());
             }
-
             thread::sleep(Duration::from_millis(10));
         };
 
@@ -208,10 +243,9 @@ impl AllowlistedProcessSupervisor {
             .lock()
             .map_err(|_| CoreError::ProcessExecution("stderr collector poisoned".to_string()))?
             .finish();
-
         let truncated = stdout.truncated || stderr.truncated;
 
-        Ok(ExecutionOutcome {
+        Ok(RawExecutionOutcome {
             status,
             exit_code,
             stdout: stdout.content,
@@ -384,7 +418,7 @@ impl StreamCollector {
 
     fn finish(&self) -> FinishedStream {
         FinishedStream {
-            content: String::from_utf8_lossy(&self.bytes).into_owned(),
+            content: self.bytes.clone(),
             truncated: self.truncated,
         }
     }
@@ -392,7 +426,7 @@ impl StreamCollector {
 
 #[derive(Debug)]
 struct FinishedStream {
-    content: String,
+    content: Vec<u8>,
     truncated: bool,
 }
 

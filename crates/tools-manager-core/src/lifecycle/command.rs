@@ -107,6 +107,53 @@ pub fn compile_manager_command(
     }))
 }
 
+pub(crate) fn compile_mcp_stdio(
+    command: &str,
+    args: &[String],
+) -> Result<Option<CompiledManagerCommand>, CoreError> {
+    let Some(launcher) = resolve_executable(command) else {
+        return Ok(None);
+    };
+    if command == "npx" {
+        let canonical_launcher = fs::canonicalize(&launcher)?;
+        let script = if canonical_launcher
+            .extension()
+            .and_then(|value| value.to_str())
+            == Some("js")
+        {
+            canonical_launcher
+        } else {
+            launcher
+                .parent()
+                .map(|parent| parent.join("node_modules/npm/bin/npx-cli.js"))
+                .filter(|path| path.is_file())
+                .ok_or_else(|| {
+                    CoreError::ProcessSpawn(
+                        "trusted npx JavaScript entry point is unavailable".into(),
+                    )
+                })?
+        };
+        let node = resolve_node_for_npm(&launcher).ok_or_else(|| {
+            CoreError::ProcessSpawn("trusted Node.js runtime is unavailable".into())
+        })?;
+        let node_identity = executable_identity(node)?;
+        let script_identity = executable_identity(script)?;
+        let mut argv = vec![script_identity.canonical_path.display().to_string()];
+        argv.extend_from_slice(args);
+        return Ok(Some(CompiledManagerCommand {
+            executable: node_identity.canonical_path.clone(),
+            argv,
+            identities: vec![node_identity, script_identity],
+        }));
+    }
+    let identity = executable_identity(launcher)?;
+    Ok(Some(CompiledManagerCommand {
+        executable: identity.canonical_path.clone(),
+        argv: args.to_vec(),
+        identities: vec![identity],
+    }))
+}
+
 fn apply_linux_privilege(
     manager_identity: ExecutableIdentity,
     manager_argv: Vec<String>,
@@ -357,6 +404,7 @@ fn file_sha256(path: &Path) -> Result<String, CoreError> {
 pub(crate) fn resolve_executable(name: &str) -> Option<PathBuf> {
     standard_candidates(name)
         .into_iter()
+        .chain(path_candidates(name))
         .find(|path| path.is_file())
 }
 
@@ -401,15 +449,57 @@ fn node_runtime_candidates(name: &str) -> Vec<PathBuf> {
     if let Some(candidate) = nvm_candidate(name) {
         candidates.push(candidate);
     }
-    if let Some(home) = env::var_os("HOME") {
-        candidates.push(PathBuf::from(home).join(".volta/bin").join(name));
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(program_files) = env::var_os("ProgramFiles") {
+            let file_name = if name == "node" {
+                "node.exe".to_string()
+            } else {
+                format!("{name}.cmd")
+            };
+            candidates.push(PathBuf::from(program_files).join("nodejs").join(file_name));
+        }
     }
-    candidates.extend(
-        ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
-            .into_iter()
-            .map(|root| PathBuf::from(root).join(name)),
-    );
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(home) = env::var_os("HOME") {
+            candidates.push(PathBuf::from(home).join(".volta/bin").join(name));
+        }
+        candidates.extend(
+            ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+                .into_iter()
+                .map(|root| PathBuf::from(root).join(name)),
+        );
+    }
     candidates
+}
+
+fn path_candidates(name: &str) -> Vec<PathBuf> {
+    let current = env::current_dir()
+        .ok()
+        .and_then(|path| fs::canonicalize(path).ok());
+    let names = if cfg!(windows) && Path::new(name).extension().is_none() {
+        vec![
+            format!("{name}.exe"),
+            format!("{name}.cmd"),
+            format!("{name}.bat"),
+        ]
+    } else {
+        vec![name.to_string()]
+    };
+    env::var_os("PATH")
+        .into_iter()
+        .flat_map(|value| env::split_paths(&value).collect::<Vec<_>>())
+        .filter(|root| root.is_absolute())
+        .flat_map(|root| names.iter().map(move |name| root.join(name)))
+        .filter(|candidate| {
+            current.as_ref().is_none_or(|current| {
+                fs::canonicalize(candidate)
+                    .ok()
+                    .is_some_and(|resolved| !resolved.starts_with(current))
+            })
+        })
+        .collect()
 }
 
 fn standard_candidates(name: &str) -> Vec<PathBuf> {
@@ -419,6 +509,7 @@ fn standard_candidates(name: &str) -> Vec<PathBuf> {
             PathBuf::from("/usr/local/bin/brew"),
         ],
         "npm" => node_runtime_candidates("npm"),
+        "npx" => node_runtime_candidates("npx"),
         "node" => node_runtime_candidates("node"),
         "winget" => winget_package_candidates(),
         "apt-get" => vec![PathBuf::from("/usr/bin/apt-get")],

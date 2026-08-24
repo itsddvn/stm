@@ -46,7 +46,7 @@ Retry and recovery result actions are guidance, not direct mutations. Selecting 
 - Updates: independent child plans plus every bulk item result; signed STM update remains a separate trust channel.
 - History: receipt inspection and scoped recovery use fresh lifecycle plans.
 - Skills: install/update, local modification choices, multi-target partial failure, retry, and recovery.
-- MCP: add/configure/enable/disable/remove across supported global client bindings with credential references only.
+- MCP: reviewed add analyzes an HTTPS endpoint before planning; configure/enable/disable/remove open direct immutable plans for the selected supported bindings, with credential references only.
 
 ## Keyboard and dialog behavior
 

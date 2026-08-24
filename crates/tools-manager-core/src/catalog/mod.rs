@@ -102,8 +102,17 @@ impl ToolCatalogEntry {
 }
 
 pub fn load_tool_catalog(workspace: &FixtureWorkspace) -> Result<ToolCatalogSnapshot, CoreError> {
-    let recommended_raw = workspace.read_json_value("catalog/tools/recommended.json")?;
-    let candidates_raw = workspace.read_json_value("catalog/tools/candidates.json")?;
+    let (recommended_raw, candidates_raw) = if workspace.has_skill_home_override() {
+        (
+            serde_json::from_str(include_str!("../../../../catalog/tools/recommended.json"))?,
+            serde_json::from_str(include_str!("../../../../catalog/tools/candidates.json"))?,
+        )
+    } else {
+        (
+            workspace.read_json_value("catalog/tools/recommended.json")?,
+            workspace.read_json_value("catalog/tools/candidates.json")?,
+        )
+    };
     reject_catalog_commands(&recommended_raw, "catalog/tools/recommended.json")?;
     reject_catalog_commands(&candidates_raw, "catalog/tools/candidates.json")?;
 

@@ -36,6 +36,8 @@ describe("phase four desktop IPC integration", () => {
             totalSteps: 7,
             result: "success",
           };
+        case "list_operations":
+          return [];
         case "cancel_operation":
           return true;
         case "run_diagnostics":
@@ -79,15 +81,17 @@ describe("phase four desktop IPC integration", () => {
     expect(client.isDesktop()).toBe(true);
     await client.startRefresh();
     await client.getRefreshStatus();
+    await client.listOperations();
     await client.cancelRefresh("inventory-refresh-1");
     await client.runDiagnostics();
     await client.analyzeSource("tool", "https://github.com/openai/codex");
 
     expect(invoke).toHaveBeenNthCalledWith(1, "refresh_snapshot", {});
     expect(invoke).toHaveBeenNthCalledWith(2, "refresh_status", {});
-    expect(invoke).toHaveBeenNthCalledWith(3, "cancel_operation", { operationId: "inventory-refresh-1" });
-    expect(invoke).toHaveBeenNthCalledWith(4, "run_diagnostics", {});
-    expect(invoke).toHaveBeenNthCalledWith(5, "analyze_source", {
+    expect(invoke).toHaveBeenNthCalledWith(3, "list_operations", {});
+    expect(invoke).toHaveBeenNthCalledWith(4, "cancel_operation", { operationId: "inventory-refresh-1" });
+    expect(invoke).toHaveBeenNthCalledWith(5, "run_diagnostics", {});
+    expect(invoke).toHaveBeenNthCalledWith(6, "analyze_source", {
       kind: "tool",
       url: "https://github.com/openai/codex",
     });

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::{
+        fs,
         path::PathBuf,
         sync::{
             atomic::{AtomicUsize, Ordering},
@@ -15,10 +16,12 @@ mod tests {
     use super::*;
     use crate::{
         catalog::ToolCatalogMapping,
+        domain::lifecycle::LifecyclePrivilege,
         lifecycle::{
             command::ExecutableIdentity,
             evidence::{ManagerEvidencePort, ManagerStateEvidence},
             executor::ManagedExecutionResult,
+            skill_source::fixture_skill_source_resolver,
             source_probe::SourceProbeEvidence,
         },
     };
@@ -237,6 +240,23 @@ mod tests {
             Arc::new(FixtureManagerEvidence::default()),
         );
         (service, executor)
+    }
+
+    fn skill_service(temp: &TempDir) -> (LifecycleService, PathBuf) {
+        let home = temp.path().join("home");
+        fs::create_dir_all(&home).expect("skill home");
+        let workspace =
+            FixtureWorkspace::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
+                .with_db_path(temp.path().join("state/stm.sqlite"))
+                .with_skill_home(&home);
+        let service = LifecycleService::with_ports_and_skill_resolver(
+            workspace,
+            Arc::new(SuccessfulExecutor::default()),
+            Arc::new(FixtureProbe),
+            Arc::new(FixtureManagerEvidence::default()),
+            fixture_skill_source_resolver(),
+        );
+        (service, home)
     }
 
     fn request(resource_id: &str) -> LifecyclePlanRequest {
@@ -924,5 +944,338 @@ mod tests {
             .iter()
             .any(|limitation| limitation.contains("privilege broker")));
         assert_eq!(executor.managed_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn trusted_skill_install_conflict_restore_and_rollback_are_receipt_backed() {
+        let temp = TempDir::new().expect("tempdir");
+        let (service, home) = skill_service(&temp);
+        let skill_request = |action: &str| LifecyclePlanRequest {
+            resource_kind: LifecycleResourceKind::Skill,
+            action: action.to_string(),
+            resource_id: "frontend-design".to_string(),
+            source_analysis_handle: None,
+            item_ids: None,
+        };
+
+        let install = service
+            .prepare(skill_request("skill.review_install"))
+            .expect("trusted install plan");
+        assert_eq!(install.privilege, LifecyclePrivilege::UserConfirmation);
+        assert!(install
+            .limitations
+            .iter()
+            .any(|line| line == "ADD SKILL.md"));
+        let started = service
+            .start(&install.plan_id, authorize(&install))
+            .expect("start install");
+        let installed = wait_for_completion(&service, &started.operation_id);
+        assert_eq!(installed.status, LifecycleExecutionStatus::Success);
+
+        let codex = home.join(".codex/skills/frontend-design");
+        let claude = home.join(".claude/skills/frontend-design");
+        let agentkit = home.join(".agents/skills/frontend-design");
+        for target in [&codex, &claude, &agentkit] {
+            assert!(target.join("SKILL.md").is_file());
+            assert!(target.join("LICENSE.txt").is_file());
+        }
+        let (store, _) =
+            SqliteSnapshotStore::open(temp.path().join("state/stm.sqlite")).expect("store");
+        assert_eq!(store.load_managed_skill_receipts().expect("receipts").len(), 3);
+
+        let marker = "\n# local managed override\n";
+        let mut local = fs::read_to_string(codex.join("SKILL.md")).expect("managed manifest");
+        local.push_str(marker);
+        fs::write(codex.join("SKILL.md"), local).expect("local modification");
+        let update = service
+            .prepare(skill_request("skill.review_update"))
+            .expect("update plan");
+        let started = service
+            .start(&update.plan_id, authorize(&update))
+            .expect("start blocked update");
+        let blocked = wait_for_completion(&service, &started.operation_id);
+        assert!(matches!(
+            blocked.status,
+            LifecycleExecutionStatus::Failed | LifecycleExecutionStatus::Partial
+        ));
+        assert!(fs::read_to_string(codex.join("SKILL.md"))
+            .expect("preserved local manifest")
+            .contains(marker.trim()));
+
+        let restore = service
+            .prepare(skill_request("skill.restore_managed"))
+            .expect("restore plan");
+        let started = service
+            .start(&restore.plan_id, authorize(&restore))
+            .expect("start restore");
+        let restored = wait_for_completion(&service, &started.operation_id);
+        assert_eq!(restored.status, LifecycleExecutionStatus::Success);
+        assert!(!fs::read_to_string(codex.join("SKILL.md"))
+            .expect("restored managed manifest")
+            .contains(marker.trim()));
+        assert!(!store
+            .load_available_skill_backups("frontend-design")
+            .expect("available backup")
+            .is_empty());
+
+        let rollback = service
+            .prepare(skill_request("skill.rollback_completed_target"))
+            .expect("rollback plan");
+        let started = service
+            .start(&rollback.plan_id, authorize(&rollback))
+            .expect("start rollback");
+        let rolled_back = wait_for_completion(&service, &started.operation_id);
+        assert_eq!(
+            rolled_back.status,
+            LifecycleExecutionStatus::Success,
+            "{rolled_back:?}"
+        );
+        assert!(fs::read_to_string(codex.join("SKILL.md"))
+            .expect("rolled back local manifest")
+            .contains(marker.trim()));
+    }
+    #[test]
+    fn mcp_disable_and_rollback_use_immutable_consent_and_receipts() {
+        let temp = TempDir::new().expect("tempdir");
+        let (service, home) = skill_service(&temp);
+        let config_path = home.join(".claude.json");
+        let original = br#"{
+  "theme": "dark",
+  "mcpServers": {
+    "Filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "capabilities": ["resources", "tools"]
+    }
+  }
+}"#;
+        fs::write(&config_path, original).expect("MCP config");
+        let request = LifecyclePlanRequest {
+            resource_kind: LifecycleResourceKind::Mcp,
+            action: "mcp.review_disable".to_string(),
+            resource_id: "filesystem".to_string(),
+            source_analysis_handle: None,
+            item_ids: None,
+        };
+        let plan = service.prepare(request).expect("MCP disable plan");
+        assert_eq!(
+            plan.privilege,
+            LifecyclePrivilege::UserConfirmation,
+            "{plan:?}"
+        );
+        assert_eq!(plan.affected_paths, vec![config_path.display().to_string()]);
+        let started = service
+            .start(&plan.plan_id, authorize(&plan))
+            .expect("start MCP disable");
+        let disabled = wait_for_completion(&service, &started.operation_id);
+        assert_eq!(
+            disabled.status,
+            LifecycleExecutionStatus::Success,
+            "{disabled:?}"
+        );
+        assert_eq!(disabled.items.len(), 1);
+        assert_eq!(disabled.items[0].status, LifecycleItemStatus::Success);
+        assert!(disabled.items[0].receipt.is_some());
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&config_path).expect("disabled config"))
+                .expect("disabled JSON");
+        assert_eq!(
+            value["mcpServers"]["Filesystem"]["enabled"].as_bool(),
+            Some(false)
+        );
+
+        let rollback_request = disabled
+            .recovery_actions
+            .first()
+            .expect("rollback action")
+            .plan_request
+            .clone();
+        let rollback = service.prepare(rollback_request).expect("rollback plan");
+        let started = service
+            .start(&rollback.plan_id, authorize(&rollback))
+            .expect("start MCP rollback");
+        let restored = wait_for_completion(&service, &started.operation_id);
+        assert_eq!(
+            restored.status,
+            LifecycleExecutionStatus::Success,
+            "{restored:?}"
+        );
+        assert_eq!(fs::read(&config_path).expect("restored config"), original);
+    }
+    #[test]
+    fn mcp_lifecycle_mutates_the_client_specific_entry_name() {
+        let temp = TempDir::new().expect("tempdir");
+        let (service, home) = skill_service(&temp);
+        let config_path = home.join(".claude.json");
+        fs::write(
+            &config_path,
+            br#"{"mcpServers":{"server-filesystem":{"command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/tmp"],"capabilities":["resources","tools"]}}}"#,
+        )
+        .expect("MCP config");
+        let plan = service
+            .prepare(LifecyclePlanRequest {
+                resource_kind: LifecycleResourceKind::Mcp,
+                action: "mcp.review_disable".into(),
+                resource_id: "filesystem".into(),
+                source_analysis_handle: None,
+                item_ids: None,
+            })
+            .expect("disable alias plan");
+        let started = service
+            .start(&plan.plan_id, authorize(&plan))
+            .expect("disable alias");
+        let result = wait_for_completion(&service, &started.operation_id);
+        assert_eq!(result.status, LifecycleExecutionStatus::Success);
+        let config: serde_json::Value =
+            serde_json::from_slice(&fs::read(config_path).expect("updated config")).expect("json");
+        assert_eq!(
+            config["mcpServers"]["server-filesystem"]["enabled"].as_bool(),
+            Some(false)
+        );
+        assert!(config["mcpServers"].get("Filesystem").is_none());
+    }
+
+    #[test]
+    fn approved_stdio_mapping_produces_an_immutable_add_plan() {
+        let temp = TempDir::new().expect("tempdir");
+        let (service, home) = skill_service(&temp);
+        let resource_root = home.join("shared-mcp-root");
+        fs::create_dir_all(&resource_root).expect("resource root");
+        let plan = service
+            .prepare(LifecyclePlanRequest {
+                resource_kind: LifecycleResourceKind::Mcp,
+                action: "mcp.add".into(),
+                resource_id: "filesystem".into(),
+                source_analysis_handle: None,
+                item_ids: Some(vec![
+                    "Codex".into(),
+                    resource_root.display().to_string(),
+                ]),
+            })
+            .expect("stdio add plan");
+
+        assert_eq!(plan.privilege, LifecyclePrivilege::UserConfirmation);
+        assert!(matches!(
+            plan.execution,
+            LifecycleExecution::ManagedConfigMutation { ref action } if action == "add"
+        ));
+        assert_eq!(plan.affected_paths, vec![home.join(".codex/config.toml").display().to_string()]);
+        assert!(plan.limitations.iter().any(|line| line.contains("stdio")));
+        assert_eq!(
+            mcp_retry_item_ids(&plan, &McpClientName::ClaudeCode),
+            vec![
+                resource_root.display().to_string(),
+                "Claude Code".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn keep_partial_plan_dispatches_as_an_mcp_lifecycle_action() {
+        let temp = TempDir::new().expect("tempdir");
+        let (service, _) = skill_service(&temp);
+        let plan = service
+            .prepare(LifecyclePlanRequest {
+                resource_kind: LifecycleResourceKind::Mcp,
+                action: "mcp.keep_partial".into(),
+                resource_id: "github".into(),
+                source_analysis_handle: None,
+                item_ids: None,
+            })
+            .expect("keep partial plan");
+        let started = service
+            .start(&plan.plan_id, authorize(&plan))
+            .expect("start keep partial");
+        let result = wait_for_completion(&service, &started.operation_id);
+
+        assert_eq!(result.status, LifecycleExecutionStatus::Success);
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.items[0].label, "Keep partial MCP result");
+    }
+
+    #[test]
+    fn reviewed_remote_mcp_adds_supported_clients_without_persisting_credentials() {
+        let temp = TempDir::new().expect("tempdir");
+        std::env::set_var("GITHUB_COPILOT_TOKEN", "fixture-copilot-token");
+        let (service, home) = skill_service(&temp);
+        let (analysis, request) = service
+            .analyze_source(SourceKind::Mcp, "https://api.githubcopilot.com/mcp/")
+            .expect("MCP source analysis");
+        assert_eq!(analysis.status, SourceAnalysisStatus::ReviewReady);
+        let plan = service.prepare(request).expect("MCP add plan");
+        assert_eq!(plan.privilege, LifecyclePrivilege::UserConfirmation);
+        assert!(matches!(
+            &plan.execution,
+            LifecycleExecution::ManagedConfigMutation { action } if action == "add"
+        ));
+        assert_eq!(plan.affected_paths.len(), 3);
+        assert!(plan
+            .limitations
+            .iter()
+            .any(|line| line.contains("Credential references bound to GITHUB_COPILOT_TOKEN")));
+        let started = service
+            .start(&plan.plan_id, authorize(&plan))
+            .expect("start MCP add");
+        let added = wait_for_completion(&service, &started.operation_id);
+        assert_eq!(
+            added.status,
+            LifecycleExecutionStatus::Success,
+            "{added:?}"
+        );
+        assert_eq!(added.items.len(), 3);
+        for path in [
+            home.join(".codex/config.toml"),
+            home.join(".claude.json"),
+            home.join(".cursor/mcp.json"),
+        ] {
+            let content = fs::read_to_string(path).expect("created MCP config");
+            assert!(content.contains("https://api.githubcopilot.com/mcp/"));
+            assert!(content.contains("${GITHUB_COPILOT_TOKEN}"));
+            assert!(!content.contains("fixture-copilot-token"));
+        }
+        let database = temp.path().join("state/stm.sqlite");
+        let bytes = fs::read(database).expect("SQLite state");
+        let database_text = String::from_utf8_lossy(&bytes);
+        assert!(!database_text.contains("access_token"));
+        assert!(!database_text.contains("password"));
+    }
+    #[test]
+    fn mcp_partial_client_failure_exposes_retry_keep_and_rollback_choices() {
+        let temp = TempDir::new().expect("tempdir");
+        std::env::set_var("GITHUB_COPILOT_TOKEN", "fixture-copilot-token");
+        let (service, home) = skill_service(&temp);
+        fs::write(home.join(".claude.json"), b"{ malformed").expect("malformed config");
+        let (_, request) = service
+            .analyze_source(SourceKind::Mcp, "https://api.githubcopilot.com/mcp/")
+            .expect("MCP source analysis");
+        let plan = service.prepare(request).expect("MCP add plan");
+        let started = service
+            .start(&plan.plan_id, authorize(&plan))
+            .expect("start partial MCP add");
+        let partial = wait_for_completion(&service, &started.operation_id);
+        assert_eq!(
+            partial.status,
+            LifecycleExecutionStatus::Partial,
+            "{partial:?}"
+        );
+        assert_eq!(partial.completed_steps, 2);
+        assert_eq!(partial.total_steps, 3);
+        assert_eq!(partial.retry_actions.len(), 1);
+        assert!(partial
+            .recovery_actions
+            .iter()
+            .any(|action| action.plan_request.action == "mcp.keep_partial"));
+        assert_eq!(
+            partial
+                .recovery_actions
+                .iter()
+                .filter(|action| action.plan_request.action == "mcp.rollback_completed_target")
+                .count(),
+            2
+        );
+        assert_eq!(
+            fs::read(home.join(".claude.json")).expect("malformed config preserved"),
+            b"{ malformed"
+        );
     }
 }

@@ -32,6 +32,21 @@ jobs:
       - name: Verify Phase 3 read-only core fixtures
         run: pnpm verify:phase-three-core
 
+      - name: Verify authenticated skill catalog
+        run: pnpm verify:skill-catalog
+
+      - name: Verify approved MCP mappings
+        run: pnpm verify:mcp-catalog
+
+      - name: Verify release contracts and matrix
+        run: pnpm verify:release-contract
+
+      - name: Verify release tooling behavior
+        run: pnpm verify:release-tooling
+
+      - name: Verify repository secret patterns
+        run: pnpm verify:no-secrets
+
       - name: Typecheck frontend
         run: pnpm typecheck
 

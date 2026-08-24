@@ -25,7 +25,7 @@ export function UpdateReviewDialog({ items, open, onClose }: { items: UpdateView
       footer={(
         <>
           <button className="secondary-button" type="button" onClick={onClose}>{lifecycle.stage === "result" ? "Close" : "Cancel"}</button>
-          {lifecycle.stage === "review" ? <button className="primary-button" type="button" disabled={!lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}><AppIcon name="run" />Authorize &amp; Start</button> : null}
+          {lifecycle.stage === "review" ? <button className="primary-button" type="button" disabled={lifecycle.starting || !lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}><AppIcon name="run" />Authorize &amp; Start</button> : null}
           {lifecycle.stage === "progress" && lifecycle.result?.canCancel ? <button className="secondary-button" type="button" onClick={() => void lifecycle.cancel()}>Cancel Operation</button> : null}
           {lifecycle.stage === "progress" ? <button className="primary-button" type="button" onClick={() => void lifecycle.refreshStatus()}>Refresh Status</button> : null}
         </>

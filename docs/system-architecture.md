@@ -36,9 +36,10 @@ The Rust core does not depend on Tauri. All desktop-runtime concerns stay in `sr
 - Tool inventory and lifecycle evidence adapters cover WinGet, Homebrew formula/cask, npm, APT/dpkg, DNF/RPM, and Pacman while preserving each manager's command and update semantics.
 - Manager fixtures cover success, empty, malformed, manager-unavailable, timed-out, version-variant, ownership, update, no-op, and state-drift evidence. Disposable CI runners separately exercise real Homebrew formula/cask, npm, APT, DNF, and WinGet install/rescan/no-op/uninstall behavior.
 - Global skill scanning is bounded to configured global roots and rejects project-local roots plus symlink escapes.
-- MCP discovery is read-only and normalizes Codex, Claude Code, and Cursor fixtures into one canonical binding model with duplicate logical-binding collapse and per-client enablement state.
-- MCP auth values are never surfaced; only redacted references are retained.
-- Missing MCP auth references downgrade the server to a blocked/read-only state rather than exposing secret material.
+- MCP discovery reads only bounded regular files beneath the canonical user home and normalizes Codex, Claude Code, and Cursor configurations into canonical servers with client-specific transport, command or endpoint, arguments, capabilities, auth references, scope, and enablement.
+- MCP auth values are never surfaced or persisted. Environment names and approved credential handles remain references; unavailable references block lifecycle planning.
+- MCP mutations resolve approved declarative mappings, bind every client config digest into an immutable consent plan, acquire persistent cross-process file locks, revalidate all targets before the first write, and use atomic replacement with per-client outcomes.
+- Receipt-backed MCP backups are authenticated XChaCha20-Poly1305 envelopes. The backup key is created and retrieved through macOS Keychain, Windows Credential Manager, or Linux Secret Service; plaintext credentials never enter backup artifacts or SQLite.
 
 ## Elevation
 
@@ -56,6 +57,13 @@ The Rust core does not depend on Tauri. All desktop-runtime concerns stay in `sr
 - Operations are serialized per authoritative manager inside the single desktop instance, preserve per-item batch results, persist complete redacted results, and trigger an authoritative inventory refresh before updated state reaches the UI. Snapshot refresh and verified lifecycle postcondition merges share one lock so a fixture scan cannot overwrite newer live manager evidence. A mutation with an unverified postcondition or failed durable receipt is `recoverable`, not falsely successful.
 - Homebrew execution disables auto-update, cleanup, and installed-dependent checks. Linux privilege-required mutations execute only directly as root or through a revalidated `pkexec` broker with the reviewed manager path and exact argument vector. Pacman install/update remains detect-only because `-Syu` refreshes repository state after consent and can violate the reviewed target; uninstall remains package-scoped.
 - Vendor handoff remains non-transactional and never claims app-managed rollback.
+
+## MCP lifecycle
+
+- Approved stdio add plans come only from the versioned MCP mapping catalog. Absolute resource roots remain typed arguments, executable identities are locked before consent, and health executes only the MCP `initialize` exchange under a bounded environment, timeout, and output limit.
+- Reviewed remote add and update plans must match approved endpoint, capability, supported-client, and credential-reference metadata. Unknown endpoints and unavailable references remain review-only.
+- Existing configure, enable, disable, and remove actions open a direct immutable plan; only add or source-changing flows require source analysis. Retry, keep-partial, and rollback actions always prepare fresh evidence and consent.
+- Recovery restores an encrypted backup only when the current target still matches the replacement digest. User changes, backup tampering, symlink escapes, stale plans, and concurrent overlapping writes fail closed without overwrite.
 
 ## Catalog and update separation
 

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/tools-manager-core", "src-tauri"]
+members = ["crates/tools-manager-core", "crates/release-verifier", "src-tauri"]
 resolver = "2"
 
 [workspace.package]
@@ -12,19 +12,27 @@ repository = "https://example.invalid/tools-managers"
 homepage = "https://example.invalid/tools-managers"
 
 [workspace.dependencies]
+base64 = "0.22.1"
+chacha20poly1305 = "0.10.1"
 regex = "1.11.1"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 open = "5.3.2"
 reqwest = { version = "0.12.22", default-features = false, features = ["blocking", "rustls-tls"] }
+ed25519-dalek = "2.1.1"
+fs2 = "0.4.3"
+keyring = "4.1.6"
+minisign-verify = "0.2.5"
+semver = "1.0.28"
 serde = { version = "1.0.219", features = ["derive"] }
 sha2 = "0.10.9"
 serde_json = "1.0.140"
 tauri = { version = "=2.11.2", features = [] }
 tauri-build = { version = "=2.6.2" }
 tauri-plugin-single-instance = "=2.4.3"
+tauri-plugin-updater = "=2.10.1"
 tempfile = "3.20.0"
 libc = "0.2.175"
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_Packaging_Appx", "Win32_System_Threading"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Storage_Packaging_Appx", "Win32_System_Threading"] }
 thiserror = "2.0.12"
 time = { version = "0.3.41", features = ["formatting", "parsing"] }
 toml = "0.8.19"

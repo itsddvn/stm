@@ -1,12 +1,12 @@
 ---
 phase: 8
 title: "Phase 8: Cross Platform Release Hardening"
-status: todo
+status: blocked
 priority: P1
 effort: "3-4 engineer-weeks"
 dependencies: [4, 5, 6, 7]
 ui_gate: "UI Contract v1.1 approved and locked; reopen Phase 1 before intentional UI change"
-external_gate: "Supported OS/architecture matrix and signing/notarization credentials approved"
+external_gate: "Matrix frozen; blocked on protected signing/notarization credentials and signed fresh-machine release evidence"
 ---
 
 # Phase 8: Cross Platform Release Hardening
@@ -36,15 +36,15 @@ Freeze the supported matrix, harden supply-chain and privacy boundaries, produce
 
 ## Requirements
 
-- [ ] Verify UI Contract v1.1 lock before work starts and in every release gate.
-- [ ] Freeze minimum OS versions and CPU architectures from Phase 2 evidence.
-- [ ] Produce reproducible-enough locked builds, SBOM/dependency inventory, signed installers, macOS notarization, and release checksums/attestations.
-- [ ] Configure Tauri signed updater artifacts and authenticated versioned endpoint; signatures are mandatory.
-- [ ] Bind product self-update logic to the approved settings/consent/progress/failure/recovery UI without reusing tool, skill, or MCP receipts.
-- [ ] Test fresh install, app upgrade, interrupted update, rollback/reinstall, corrupted cache, offline, restricted privilege, and manager-missing scenarios.
-- [ ] Run security, privacy, accessibility, performance, recovery, cross-platform visual, and smoke gates.
-- [ ] Publish exact support/mapping matrix and known limitations; make no unsupported lifecycle claim.
-- [ ] Reopen Phase 1 before intentional route, state, copy, token, interaction, responsive, accessibility, or visual-baseline changes.
+- [x] Verify UI Contract v1.1 lock before work starts and in every release gate.
+- [x] Freeze minimum OS versions and CPU architectures from Phase 2 evidence.
+- [ ] Produce signed installers and complete macOS notarization; locked builds, SBOM, dependency inventory, checksums, provenance, and protected workflow are implemented.
+- [x] Configure Tauri signed updater artifacts and authenticated versioned endpoint; protected release credentials remain required to build them.
+- [x] Bind product self-update logic to the approved settings/consent/progress/failure/recovery UI without reusing tool, skill, or MCP receipts.
+- [ ] Test signed fresh install, app upgrade, interrupted update, rollback/reinstall, corrupted cache, offline, restricted privilege, and manager-missing scenarios on every stable target.
+- [ ] Complete cross-platform security, privacy, accessibility, performance, recovery, visual, and smoke gates; local and contract gates pass.
+- [x] Publish exact support/mapping matrix and known limitations; make no unsupported lifecycle claim.
+- [x] Preserve locked route, state, copy, token, interaction, responsive, accessibility, and visual contracts.
 
 ## Architecture
 
@@ -54,13 +54,13 @@ Application updater writes only product release state. Tool receipts and skill r
 
 ## Related Code Files
 
-- Create: `/Users/itsddvn/projects/tools-managers/.github/workflows/release.yml`, `security.yml`, and platform smoke workflow definitions
-- Create: `/Users/itsddvn/projects/tools-managers/scripts/verify-release-artifacts.*` using platform-appropriate repository conventions
-- Create: `/Users/itsddvn/projects/tools-managers/docs/deployment-guide.md`, `/Users/itsddvn/projects/tools-managers/docs/security-model.md`, `/Users/itsddvn/projects/tools-managers/docs/supported-platforms.md`
-- Modify: `/Users/itsddvn/projects/tools-managers/src-tauri/tauri.conf.json` and updater/capability configuration
-- Modify: `/Users/itsddvn/projects/tools-managers/src/features/settings/` and `/Users/itsddvn/projects/tools-managers/src/features/updates/` only to bind approved product-update actions and verified platform defects
-- Modify: `/Users/itsddvn/projects/tools-managers/assets/designs/tools-manager-ui/` only through the Phase 1 reopen/version-bump process when approved platform-specific baselines genuinely change
-- Modify: `/Users/itsddvn/projects/tools-managers/README.md` with installation, privacy, support, and recovery guidance
+- Create: `.github/workflows/release.yml` and `security.yml` for protected signed drafts, dependency/security gates, SBOM, provenance, and artifact retention.
+- Create: release config, contract, secret, tooling, and artifact verification scripts following repository TypeScript/Node conventions.
+- Create: `docs/deployment-guide.md`, `docs/security-model.md`, and `docs/supported-platforms.md`.
+- Modify: `src-tauri/tauri.conf.json`, release-only Tauri config, updater dependency, and typed Rust product-update modules.
+- Keep approved Settings/Updates UI; bind its existing product action through the typed Tauri lifecycle command route.
+- Preserve design assets and visual baselines; no intentional UI change was required.
+- Modify: `README.md` with release commands, privacy, support, and recovery guidance.
 
 ## Implementation Steps
 
@@ -79,24 +79,34 @@ Application updater writes only product release state. Tool receipts and skill r
 
 ## Todo
 
-- [ ] UI Contract v1.1 lock passes on every supported release build.
-- [ ] OS/architecture matrix has named CI/build/smoke evidence and owner.
-- [ ] Signing/notarization and updater secrets never enter repository or logs.
-- [ ] Invalid signature, downgrade, wrong channel, interrupted download, and corrupted artifact are rejected safely.
-- [ ] Existing SQLite schema and receipts migrate across app update without data loss.
-- [ ] Security/privacy/accessibility/visual findings are fixed or explicitly release-blocking.
-- [ ] Release notes distinguish product self-update from managed tool, skill, and MCP lifecycle operations.
-- [ ] Fresh-machine and upgrade smoke results include tool, skill, MCP, interaction, and critical screenshot evidence for the approved UI.
+- [x] UI Contract v1.1 lock passes on every configured release build.
+- [x] OS/architecture matrix has named CI/build/smoke runners and stable versus experimental ownership.
+- [x] Signing/notarization and updater secrets never enter repository or logs.
+- [ ] Invalid signature, downgrade, wrong channel, interrupted download, and corrupted signed artifact rejection pass against real draft artifacts.
+- [x] Existing SQLite schema and receipts pass local migration/regression tests; signed previous-version upgrade evidence remains pending.
+- [ ] Cross-platform security/privacy/accessibility/visual findings are fixed or explicitly release-blocking after signed candidate review.
+- [x] Release guidance distinguishes product self-update from managed tool, skill, and MCP lifecycle operations.
+- [ ] Fresh-machine and upgrade smoke results include tool, skill, MCP, interaction, and critical screenshot evidence for every stable target.
 
 ## Success Criteria
 
 - [ ] Signed release candidates install and launch on every supported matrix target.
 - [ ] Signed application update succeeds from the previous supported version and rejects tampered metadata/artifacts.
-- [ ] Report §2.5 acceptance criteria pass on representative fixtures and live systems.
-- [ ] No enabled lifecycle mapping lacks platform contract evidence.
-- [ ] Published support and privacy docs match tested behavior.
-- [ ] Rollback/reinstall guidance restores a usable application without silently deleting user tool, skill, or MCP configuration state.
-- [ ] Approved UI routes, states, actions, copy, interactions, accessibility behavior, and critical visual baselines remain equivalent across supported native webviews.
+- [ ] Report §2.5 acceptance criteria pass on representative signed fixtures and live systems.
+- [x] No enabled lifecycle mapping lacks platform contract evidence.
+- [x] Published support and privacy docs match tested local behavior and explicitly mark external gates.
+- [x] Rollback/reinstall guidance restores a usable application without silently deleting user tool, skill, or MCP configuration state.
+- [ ] Approved UI routes, states, actions, copy, interactions, accessibility behavior, and critical visual baselines are equivalent across supported native webviews.
+
+## Local Completion Evidence
+
+- Stable matrix: macOS arm64/x64, Windows x64, and Ubuntu/glibc x64; Windows/Linux ARM64 remain experimental.
+- Signed updater boundary: exact `latest.json` Minisign authentication, monotonic metadata version/digest, full target/URL/manifest/artifact fingerprint consent and revalidation, single-use global execution exclusion, Windows pending-install restart reconciliation, separate durable product receipts, and internal-build fail-closed behavior.
+- Automation: exact annotated-tag/main/version provenance, full-SHA-pinned actions, exact-commit quality/security gates before step-scoped secrets, native and updater signing, signed aggregate manifest verification, dependency review, pnpm/cargo audit, CodeQL, secret patterns, SBOM, provenance attestations, streaming checksums, and stable-matrix contract checks.
+- Local verification: UI Contract v1.1, release contract/tooling/secret checks, frontend lint/typecheck/tests, desktop integration, Rust format/clippy/tests, internal Tauri release build, generated release-config build, and packaged launch pass.
+- Runtime UI: signed product fixture shows exact independent plan and recoverable terminal state without tool/skill/MCP receipt reuse.
+- Independent focused correctness and security re-reviews pass with no remaining Blocker/Important or Critical/High finding in the implemented release paths.
+- External blocker: protected Apple/Windows/updater signing credentials and signed fresh-machine/upgrade evidence are unavailable. No public-release-ready claim is made.
 
 ## Risk Assessment
 
@@ -115,4 +125,4 @@ Application updater writes only product release state. Tool receipts and skill r
 
 ## Next Steps
 
-After release gates pass, move deferred bundles, catalog suggestions, extra registries, and public CLI into separately approved plans. Any UI change remains subject to Phase 1 reopen and reapproval.
+Provide protected signing/notarization credentials, build the signed draft matrix, complete fresh-machine and previous-version update smoke, adjudicate cross-platform review, then promote updater metadata last. Deferred product scope still requires separate approval.

@@ -15,12 +15,22 @@ use crate::{
             LifecycleExecutionStatus, LifecycleFollowUpAction, LifecycleItemResult,
             LifecycleItemStatus, LifecyclePlan, LifecyclePlanRequest, LifecycleResourceKind,
         },
+        mcp::McpClientName,
         operation::{OperationReceipt, OperationStatus},
+        skill::SkillClientName,
         source::{SourceAnalysisRecord, SourceAnalysisStatus, SourceKind, SourceTrust},
         tool::ToolRecord,
     },
     error::CoreError,
     feasibility::{process_supervisor::CancelSignal, source_analysis::analyze_source},
+    mcp::lifecycle::{
+        McpConfigMaterializer, McpMutationOutcome, McpTargetStatus, PreparedMcpAction,
+    },
+    skill_catalog::{load_current_authenticated_catalog, AuthenticatedSkillCatalog},
+    skill_lifecycle::{
+        cleanup_abandoned_private_staging, ApprovedSkillRoot, PartialFailurePolicy,
+        SkillMaterializer, TargetMutationStatus, TreeValidationPolicy,
+    },
     storage::{OperationLogEntry, SqliteSnapshotStore},
 };
 
@@ -28,7 +38,8 @@ use super::{
     command::manager_evidence_executable,
     evidence::{real_manager_evidence, ManagerEvidencePort},
     executor::{real_executor, LifecycleExecutionPort},
-    planner::{prepare_plan, PreparedPlan},
+    planner::{prepare_plan, PreparedPlan, PreparedSkillAction},
+    skill_source::{real_skill_source_resolver, SkillSourceResolverPort},
     source_probe::{analyze_source_with_probe, BoundedHttpsSourceProbe, SourceProbe},
     source_registry::SourceAnalysisBinding,
     time::{format_timestamp, now, parse_timestamp},
@@ -43,6 +54,7 @@ pub struct LifecycleService {
     executor: Arc<dyn LifecycleExecutionPort>,
     source_probe: Arc<dyn SourceProbe>,
     manager_evidence: Arc<dyn ManagerEvidencePort>,
+    skill_resolver: Arc<dyn SkillSourceResolverPort>,
     snapshot_merge: Arc<Mutex<()>>,
     recovery_blocker: Arc<Mutex<Option<String>>>,
 }
@@ -91,16 +103,41 @@ impl LifecycleService {
         source_probe: Arc<dyn SourceProbe>,
         manager_evidence: Arc<dyn ManagerEvidencePort>,
     ) -> Self {
+        Self::with_ports_and_skill_resolver(
+            workspace,
+            executor,
+            source_probe,
+            manager_evidence,
+            real_skill_source_resolver(),
+        )
+    }
+
+    fn with_ports_and_skill_resolver(
+        workspace: FixtureWorkspace,
+        executor: Arc<dyn LifecycleExecutionPort>,
+        source_probe: Arc<dyn SourceProbe>,
+        manager_evidence: Arc<dyn ManagerEvidencePort>,
+        skill_resolver: Arc<dyn SkillSourceResolverPort>,
+    ) -> Self {
         let service = Self {
             workspace,
             state: Arc::new(Mutex::new(LifecycleState::default())),
             executor,
             source_probe,
             manager_evidence,
+            skill_resolver,
             snapshot_merge: Arc::new(Mutex::new(())),
             recovery_blocker: Arc::new(Mutex::new(None)),
         };
-        match service.recover_interrupted_operations() {
+        let recovery = service
+            .recover_interrupted_operations()
+            .and_then(|live_process_found| {
+                cleanup_abandoned_private_staging(&service.workspace.db_path())?;
+                service.recover_interrupted_skill_operations()?;
+                service.recover_interrupted_mcp_operations()?;
+                Ok(live_process_found)
+            });
+        match recovery {
             Ok(false) => {}
             Ok(true) => {
                 *service
@@ -257,6 +294,7 @@ impl LifecycleService {
                 self.manager_evidence.as_ref(),
                 restart_request.clone(),
                 None,
+                self.skill_resolver.as_ref(),
                 0,
                 now(),
             ) {
@@ -297,6 +335,25 @@ impl LifecycleService {
             store.reconcile_lifecycle_receipt(&operation, &result, &completed_at)?;
         }
         Ok(live_process_found)
+    }
+
+    fn recover_interrupted_skill_operations(&self) -> Result<(), CoreError> {
+        let recorded_at = format_timestamp(now())?;
+        let outcomes = skill_materializer(&self.workspace)?.recover_interrupted(&recorded_at)?;
+        if outcomes
+            .iter()
+            .any(|outcome| outcome.status == TargetMutationStatus::RecoveryRequired)
+        {
+            return Err(CoreError::LifecycleEvidenceChanged(
+                "a managed skill target requires recovery review".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn recover_interrupted_mcp_operations(&self) -> Result<(), CoreError> {
+        let recorded_at = format_timestamp(now())?;
+        mcp_materializer(&self.workspace)?.recover_interrupted(&recorded_at)
     }
 
     pub fn analyze_source(
@@ -351,14 +408,7 @@ impl LifecycleService {
         };
         if let Some(resource_id) = resource_id.as_deref() {
             record.trust = SourceTrust::CatalogMatch;
-            record.publisher = "Locked tool catalog identity matched".to_string();
-            if let Some(entry) = load_tool_catalog(&self.workspace)?.get(resource_id) {
-                record.detected_name = entry.name.clone();
-                record.target = format!(
-                    "Canonical tool {} and its current-platform owner mapping",
-                    entry.id
-                );
-            }
+            self.decorate_catalog_record(&kind, resource_id, &mut record)?;
         }
         if record.status != SourceAnalysisStatus::ReviewReady {
             record.trust = SourceTrust::Blocked;
@@ -400,6 +450,7 @@ impl LifecycleService {
             self.manager_evidence.as_ref(),
             request,
             source.as_ref(),
+            self.skill_resolver.as_ref(),
             sequence,
             now(),
         )?;
@@ -596,7 +647,7 @@ impl LifecycleService {
             ));
         }
         refreshed.trust = SourceTrust::CatalogMatch;
-        refreshed.publisher = "Locked tool catalog identity matched".to_string();
+        self.decorate_catalog_record(&binding.record.kind, expected_resource_id, &mut refreshed)?;
         let refreshed_expires_at = checked_at + SOURCE_CACHE_TTL;
         let refreshed_binding = SourceAnalysisBinding {
             record: refreshed,
@@ -622,21 +673,98 @@ impl LifecycleService {
         kind: &SourceKind,
         record: &SourceAnalysisRecord,
     ) -> Result<Option<String>, CoreError> {
-        if *kind != SourceKind::Tool || record.status != SourceAnalysisStatus::ReviewReady {
+        if record.status != SourceAnalysisStatus::ReviewReady {
             return Ok(None);
         }
         let Some(normalized) = record.normalized_url.as_deref() else {
             return Ok(None);
         };
-        let identity = source_identity(normalized)?;
-        let catalog = load_tool_catalog(&self.workspace)?;
-        Ok(catalog
-            .tools
-            .iter()
-            .find(|entry| {
-                source_identity(&entry.source_url).ok().as_deref() == Some(identity.as_str())
+        match kind {
+            SourceKind::Tool => {
+                let identity = source_identity(normalized)?;
+                let catalog = load_tool_catalog(&self.workspace)?;
+                Ok(catalog
+                    .tools
+                    .iter()
+                    .find(|entry| {
+                        source_identity(&entry.source_url).ok().as_deref()
+                            == Some(identity.as_str())
+                    })
+                    .map(|entry| entry.id.clone()))
+            }
+            SourceKind::Skill => {
+                let (repository, subpath) = skill_source_identity(normalized)?;
+                let catalog = self.load_current_skill_catalog()?;
+                let matching = catalog
+                    .skills
+                    .iter()
+                    .filter(|entry| {
+                        entry.source.repository == repository
+                            && subpath
+                                .as_deref()
+                                .is_none_or(|value| entry.source.subpath == value)
+                    })
+                    .collect::<Vec<_>>();
+                Ok((matching.len() == 1).then(|| matching[0].id.clone()))
+            }
+            SourceKind::Mcp => Ok(None),
+        }
+    }
+
+    fn load_current_skill_catalog(&self) -> Result<AuthenticatedSkillCatalog, CoreError> {
+        load_current_authenticated_catalog(&self.workspace.db_path())
+            .map(|snapshot| snapshot.catalog)
+            .map_err(|_| {
+                CoreError::LifecycleEvidenceChanged(
+                    "no fresh authenticated skill catalog is available".to_string(),
+                )
             })
-            .map(|entry| entry.id.clone()))
+    }
+
+    fn decorate_catalog_record(
+        &self,
+        kind: &SourceKind,
+        resource_id: &str,
+        record: &mut SourceAnalysisRecord,
+    ) -> Result<(), CoreError> {
+        match kind {
+            SourceKind::Tool => {
+                record.publisher = "Locked tool catalog identity matched".to_string();
+                if let Some(entry) = load_tool_catalog(&self.workspace)?.get(resource_id) {
+                    record.detected_name = entry.name.clone();
+                    record.target = format!(
+                        "Canonical tool {} and its current-platform owner mapping",
+                        entry.id
+                    );
+                }
+            }
+            SourceKind::Skill => {
+                let catalog = self.load_current_skill_catalog()?;
+                let entry = catalog.find_by_id(resource_id).ok_or_else(|| {
+                    CoreError::LifecycleEvidenceChanged(
+                        "trusted skill catalog identity changed".to_string(),
+                    )
+                })?;
+                record.detected_name = entry.name.clone();
+                record.publisher = format!("Authenticated catalog publisher: {}", entry.publisher);
+                record.target = format!(
+                    "{} approved global client target{}",
+                    entry.targets.len(),
+                    if entry.targets.len() == 1 { "" } else { "s" }
+                );
+                for risk in &entry.risk_flags {
+                    if !record.risk_flags.contains(risk) {
+                        record.risk_flags.push(risk.clone());
+                    }
+                }
+                record.notes.push(format!(
+                    "Catalog provenance pins commit {} and tree digest {}.",
+                    entry.source.commit, entry.source.tree_sha256
+                ));
+            }
+            SourceKind::Mcp => {}
+        }
+        Ok(())
     }
 
     fn revalidate(&self, original: &PreparedPlan) -> Result<(), CoreError> {
@@ -646,9 +774,15 @@ impl LifecycleService {
             self.manager_evidence.as_ref(),
             original.plan.request.clone(),
             source.as_ref(),
+            self.skill_resolver.as_ref(),
             0,
             now(),
         )?;
+        if let Some(PreparedSkillAction::Materialize(prepared)) = &current.skill_action {
+            let _ = self
+                .skill_resolver
+                .cleanup(&self.workspace, &prepared.staging);
+        }
         if current.evidence_fingerprint != original.evidence_fingerprint
             || current.executable_identities != original.executable_identities
         {
@@ -665,6 +799,12 @@ impl LifecycleService {
         operation_id: &str,
         cancel: &CancelSignal,
     ) -> LifecycleExecutionResult {
+        if prepared.skill_action.is_some() {
+            return self.execute_skill_action(prepared, operation_id, cancel);
+        }
+        if prepared.mcp_action.is_some() {
+            return self.execute_mcp_action(prepared, operation_id, cancel);
+        }
         if prepared.children.is_empty() {
             if let Err(error) = self.revalidate(prepared) {
                 return failed_result(
@@ -712,6 +852,248 @@ impl LifecycleService {
             }
         }
         aggregate_result(&prepared.plan, operation_id, outcomes)
+    }
+
+    fn execute_skill_action(
+        &self,
+        prepared: &PreparedPlan,
+        operation_id: &str,
+        cancel: &CancelSignal,
+    ) -> LifecycleExecutionResult {
+        let cleanup = || {
+            if let Some(PreparedSkillAction::Materialize(mutation)) = &prepared.skill_action {
+                let _ = self
+                    .skill_resolver
+                    .cleanup(&self.workspace, &mutation.staging);
+            }
+        };
+        if cancel.is_cancelled() {
+            cleanup();
+            return aggregate_result(
+                &prepared.plan,
+                operation_id,
+                vec![(cancelled_item(&prepared.plan), false)],
+            );
+        }
+        if let Err(error) = self.revalidate(prepared) {
+            cleanup();
+            return failed_result(
+                &prepared.plan,
+                operation_id,
+                format!("Revalidation failed before execution: {error}"),
+            );
+        }
+
+        let recorded_at = format_timestamp(now()).unwrap_or_else(|_| "redacted".to_string());
+        let materializer = match skill_materializer(&self.workspace) {
+            Ok(materializer) => materializer,
+            Err(error) => {
+                cleanup();
+                return failed_result(
+                    &prepared.plan,
+                    operation_id,
+                    format!("Skill lifecycle setup failed: {error}"),
+                );
+            }
+        };
+        let result = match prepared.skill_action.as_ref() {
+            Some(PreparedSkillAction::Materialize(mutation)) => {
+                let mut execution = mutation.clone();
+                execution.operation_id = operation_id.to_string();
+                if prepared.plan.request.action.contains("export_diff") {
+                    let export_root = self
+                        .workspace
+                        .lifecycle_data_root()
+                        .join(".stm-skill-exports");
+                    let mut outcomes = Vec::new();
+                    for (index, target) in execution.targets.iter().enumerate() {
+                        let destination =
+                            export_root.join(format!("{}-{index}.json", prepared.plan.plan_id));
+                        match materializer.export_target_diff(&execution, target, &destination) {
+                            Ok(outcome) => outcomes.push(outcome),
+                            Err(error) => {
+                                cleanup();
+                                return failed_result(
+                                    &prepared.plan,
+                                    operation_id,
+                                    format!("Skill diff export failed: {error}"),
+                                );
+                            }
+                        }
+                    }
+                    Ok(crate::skill_lifecycle::SkillMutationOutcome {
+                        operation_id: operation_id.to_string(),
+                        completed: outcomes.len(),
+                        failed: 0,
+                        partial_state_kept: false,
+                        skipped: 0,
+                        targets: outcomes,
+                    })
+                } else {
+                    let partial_policy = if prepared.plan.request.action.contains("keep_local") {
+                        PartialFailurePolicy::KeepPartial
+                    } else {
+                        PartialFailurePolicy::RollbackCompleted
+                    };
+                    materializer.materialize(&execution, partial_policy, &recorded_at)
+                }
+            }
+            Some(PreparedSkillAction::RestoreBackup(backup_id)) => materializer
+                .restore_backup(backup_id, &recorded_at)
+                .map(|outcome| crate::skill_lifecycle::SkillMutationOutcome {
+                    operation_id: operation_id.to_string(),
+                    completed: 1,
+                    failed: 0,
+                    partial_state_kept: false,
+                    skipped: 0,
+                    targets: vec![outcome],
+                }),
+            Some(PreparedSkillAction::KeepPartial) => {
+                cleanup();
+                return LifecycleExecutionResult {
+                    operation_id: operation_id.to_string(),
+                    plan_digest: prepared.plan.digest.clone(),
+                    status: LifecycleExecutionStatus::Success,
+                    completed_steps: 1,
+                    total_steps: 1,
+                    can_cancel: false,
+                    receipt: Some(receipt_id(&prepared.plan)),
+                    redacted_detail:
+                        "Receipt-backed completed targets were kept; no additional files changed."
+                            .to_string(),
+                    items: vec![LifecycleItemResult {
+                        id: prepared.plan.canonical_id.clone(),
+                        label: "Keep partial skill result".to_string(),
+                        status: LifecycleItemStatus::Success,
+                        receipt: Some(receipt_id(&prepared.plan)),
+                        redacted_detail:
+                            "The completed managed targets remain recorded and reviewable."
+                                .to_string(),
+                    }],
+                    retry_actions: Vec::new(),
+                    recovery_actions: Vec::new(),
+                };
+            }
+            None => unreachable!("skill execution requires a prepared skill action"),
+        };
+        cleanup();
+        match result {
+            Ok(outcome) => skill_execution_result(&prepared.plan, operation_id, outcome),
+            Err(error) => failed_result(
+                &prepared.plan,
+                operation_id,
+                format!("Skill lifecycle execution failed: {error}"),
+            ),
+        }
+    }
+
+    fn execute_mcp_action(
+        &self,
+        prepared: &PreparedPlan,
+        operation_id: &str,
+        cancel: &CancelSignal,
+    ) -> LifecycleExecutionResult {
+        if cancel.is_cancelled() {
+            return aggregate_result(
+                &prepared.plan,
+                operation_id,
+                vec![(cancelled_item(&prepared.plan), false)],
+            );
+        }
+        if let Err(error) = self.revalidate(prepared) {
+            return failed_result(
+                &prepared.plan,
+                operation_id,
+                format!("Revalidation failed before execution: {error}"),
+            );
+        }
+        let recorded_at = format_timestamp(now()).unwrap_or_else(|_| "redacted".to_string());
+        let materializer = match mcp_materializer(&self.workspace) {
+            Ok(materializer) => materializer,
+            Err(error) => {
+                return failed_result(
+                    &prepared.plan,
+                    operation_id,
+                    format!("MCP lifecycle setup failed: {error}"),
+                )
+            }
+        };
+        let result = match prepared.mcp_action.as_ref() {
+            Some(PreparedMcpAction::Mutate(mutation)) => {
+                let mut execution = mutation.clone();
+                execution.operation_id = operation_id.to_string();
+                materializer
+                    .materialize(&execution, &recorded_at)
+                    .and_then(|mut outcome| {
+                        if matches!(
+                            execution.action,
+                            crate::mcp::lifecycle::McpMutationAction::Add
+                                | crate::mcp::lifecycle::McpMutationAction::Update
+                                | crate::mcp::lifecycle::McpMutationAction::Enable
+                        ) {
+                            for target in &execution.targets {
+                                let server = execution
+                                    .server
+                                    .clients
+                                    .iter()
+                                    .find(|binding| binding.client == target.client)
+                                    .map_or_else(
+                                        || execution.server.clone(),
+                                        |binding| binding.project_server(&execution.server),
+                                    );
+                                let health = crate::mcp::health::check_protocol_health(
+                                    &server,
+                                    &prepared.executable_identities,
+                                );
+                                materializer.record_health(
+                                    &mut outcome,
+                                    &target.client,
+                                    health,
+                                    &recorded_at,
+                                )?;
+                            }
+                        }
+                        Ok(outcome)
+                    })
+            }
+            Some(PreparedMcpAction::RestoreBackup(backup_id)) => {
+                materializer.restore_backup(backup_id, &recorded_at)
+            }
+            Some(PreparedMcpAction::KeepPartial) => {
+                return LifecycleExecutionResult {
+                    operation_id: operation_id.to_string(),
+                    plan_digest: prepared.plan.digest.clone(),
+                    status: LifecycleExecutionStatus::Success,
+                    completed_steps: 1,
+                    total_steps: 1,
+                    can_cancel: false,
+                    receipt: Some(receipt_id(&prepared.plan)),
+                    redacted_detail:
+                        "Successful MCP client bindings were kept; no configurations changed."
+                            .to_string(),
+                    items: vec![LifecycleItemResult {
+                        id: prepared.plan.resource_id.clone(),
+                        label: "Keep partial MCP result".to_string(),
+                        status: LifecycleItemStatus::Success,
+                        receipt: Some(receipt_id(&prepared.plan)),
+                        redacted_detail:
+                            "Completed client bindings remain receipt-backed and reviewable."
+                                .to_string(),
+                    }],
+                    retry_actions: Vec::new(),
+                    recovery_actions: Vec::new(),
+                };
+            }
+            None => unreachable!("MCP execution requires a prepared MCP action"),
+        };
+        match result {
+            Ok(outcome) => mcp_execution_result(&prepared.plan, operation_id, outcome),
+            Err(error) => failed_result(
+                &prepared.plan,
+                operation_id,
+                format!("MCP lifecycle execution failed: {error}"),
+            ),
+        }
     }
 
     fn execute_plan(
@@ -800,6 +1182,15 @@ impl LifecycleService {
                 status: LifecycleItemStatus::Skipped,
                 receipt: None,
                 redacted_detail: guidance.clone(),
+            },
+            LifecycleExecution::ManagedConfigMutation { .. } => LifecycleItemResult {
+                id: plan.canonical_id.clone(),
+                label,
+                status: LifecycleItemStatus::Failed,
+                receipt: None,
+                redacted_detail:
+                    "Managed configuration plans require their resource-specific executor."
+                        .to_string(),
             },
             LifecycleExecution::Batch { .. } => LifecycleItemResult {
                 id: plan.canonical_id.clone(),
@@ -935,6 +1326,307 @@ impl LifecycleService {
         if let Some(runtime) = state.operations.get_mut(&result.operation_id) {
             runtime.result = result;
         }
+    }
+}
+
+fn skill_materializer(workspace: &FixtureWorkspace) -> Result<SkillMaterializer, CoreError> {
+    let home = workspace.skill_home()?;
+    SkillMaterializer::new(
+        workspace.db_path(),
+        workspace.project_root(),
+        vec![
+            ApprovedSkillRoot {
+                client: SkillClientName::Codex,
+                root: home.join(".codex/skills"),
+            },
+            ApprovedSkillRoot {
+                client: SkillClientName::ClaudeCode,
+                root: home.join(".claude/skills"),
+            },
+            ApprovedSkillRoot {
+                client: SkillClientName::AgentKit,
+                root: home.join(".agents/skills"),
+            },
+        ],
+        TreeValidationPolicy::default(),
+    )
+}
+
+fn mcp_materializer(workspace: &FixtureWorkspace) -> Result<McpConfigMaterializer, CoreError> {
+    McpConfigMaterializer::new(workspace.db_path(), workspace.skill_home()?)
+}
+
+fn skill_execution_result(
+    plan: &LifecyclePlan,
+    operation_id: &str,
+    outcome: crate::skill_lifecycle::SkillMutationOutcome,
+) -> LifecycleExecutionResult {
+    let mut retry_actions = Vec::new();
+    let mut recovery_actions = Vec::new();
+    let mut recovery_required = false;
+    let items = outcome
+        .targets
+        .iter()
+        .map(|target| {
+            let status = match target.status {
+                TargetMutationStatus::Installed
+                | TargetMutationStatus::Updated
+                | TargetMutationStatus::Restored
+                | TargetMutationStatus::NoOp
+                | TargetMutationStatus::KeptLocal
+                | TargetMutationStatus::DiffExported => LifecycleItemStatus::Success,
+                TargetMutationStatus::Skipped => LifecycleItemStatus::Skipped,
+                TargetMutationStatus::Failed | TargetMutationStatus::RolledBack => {
+                    retry_actions.push(LifecycleFollowUpAction {
+                        id: format!(
+                            "retry:{}:{}",
+                            plan.resource_id,
+                            skill_client_label(&target.target.client)
+                        ),
+                        label: format!(
+                            "Retry {} target",
+                            skill_client_label(&target.target.client)
+                        ),
+                        plan_request: LifecyclePlanRequest {
+                            resource_kind: LifecycleResourceKind::Skill,
+                            action: "skill.retry_failed_target".to_string(),
+                            resource_id: plan.resource_id.clone(),
+                            source_analysis_handle: None,
+                            item_ids: Some(vec![
+                                skill_client_label(&target.target.client).to_string()
+                            ]),
+                        },
+                    });
+                    LifecycleItemStatus::Failed
+                }
+                TargetMutationStatus::RecoveryRequired => {
+                    recovery_required = true;
+                    LifecycleItemStatus::Failed
+                }
+            };
+            if let Some(backup_id) = &target.backup_id {
+                recovery_actions.push(LifecycleFollowUpAction {
+                    id: format!("rollback:{backup_id}"),
+                    label: format!(
+                        "Roll back {} target",
+                        skill_client_label(&target.target.client)
+                    ),
+                    plan_request: LifecyclePlanRequest {
+                        resource_kind: LifecycleResourceKind::Skill,
+                        action: "skill.rollback_completed_target".to_string(),
+                        resource_id: plan.resource_id.clone(),
+                        source_analysis_handle: None,
+                        item_ids: Some(vec![backup_id.clone()]),
+                    },
+                });
+            }
+            LifecycleItemResult {
+                id: format!(
+                    "{}:{}",
+                    skill_client_label(&target.target.client),
+                    target.target.target_path
+                ),
+                label: format!(
+                    "{} · {}",
+                    skill_client_label(&target.target.client),
+                    target.target.target_path
+                ),
+                status,
+                receipt: target.receipt_id.clone(),
+                redacted_detail: target.redacted_detail.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    if outcome.partial_state_kept {
+        recovery_actions.push(LifecycleFollowUpAction {
+            id: format!("keep-partial:{}", plan.resource_id),
+            label: "Keep completed targets".to_string(),
+            plan_request: LifecyclePlanRequest {
+                resource_kind: LifecycleResourceKind::Skill,
+                action: "skill.keep_partial_result".to_string(),
+                resource_id: plan.resource_id.clone(),
+                source_analysis_handle: None,
+                item_ids: None,
+            },
+        });
+    }
+    let status = if recovery_required {
+        LifecycleExecutionStatus::Recoverable
+    } else if outcome.failed > 0 && outcome.completed > 0 {
+        LifecycleExecutionStatus::Partial
+    } else if outcome.failed > 0 {
+        LifecycleExecutionStatus::Failed
+    } else {
+        LifecycleExecutionStatus::Success
+    };
+    LifecycleExecutionResult {
+        operation_id: operation_id.to_string(),
+        plan_digest: plan.digest.clone(),
+        status,
+        completed_steps: outcome.completed,
+        total_steps: outcome.targets.len(),
+        can_cancel: false,
+        receipt: outcome
+            .targets
+            .iter()
+            .find_map(|target| target.receipt_id.clone()),
+        redacted_detail: format!(
+            "Skill lifecycle completed {} target(s), failed {}, skipped {}.",
+            outcome.completed, outcome.failed, outcome.skipped
+        ),
+        items,
+        retry_actions,
+        recovery_actions,
+    }
+}
+
+fn mcp_execution_result(
+    plan: &LifecyclePlan,
+    operation_id: &str,
+    outcome: McpMutationOutcome,
+) -> LifecycleExecutionResult {
+    let mut retry_actions = Vec::new();
+    let mut recovery_actions = Vec::new();
+    let items = outcome
+        .targets
+        .iter()
+        .map(|target| {
+            let status = match target.status {
+                McpTargetStatus::Success | McpTargetStatus::NoOp | McpTargetStatus::Restored => {
+                    LifecycleItemStatus::Success
+                }
+                McpTargetStatus::Failed => {
+                    retry_actions.push(LifecycleFollowUpAction {
+                        id: format!(
+                            "retry:{}:{}",
+                            plan.resource_id,
+                            mcp_client_label(&target.client)
+                        ),
+                        label: format!("Retry {} client", mcp_client_label(&target.client)),
+                        plan_request: LifecyclePlanRequest {
+                            resource_kind: LifecycleResourceKind::Mcp,
+                            action: plan.request.action.clone(),
+                            resource_id: plan.resource_id.clone(),
+                            source_analysis_handle: plan.request.source_analysis_handle.clone(),
+                            item_ids: Some(mcp_retry_item_ids(plan, &target.client)),
+                        },
+                    });
+                    LifecycleItemStatus::Failed
+                }
+            };
+            if let Some(backup_id) = &target.backup_id {
+                recovery_actions.push(LifecycleFollowUpAction {
+                    id: format!("rollback:{backup_id}"),
+                    label: format!(
+                        "Roll back {} configuration",
+                        mcp_client_label(&target.client)
+                    ),
+                    plan_request: LifecyclePlanRequest {
+                        resource_kind: LifecycleResourceKind::Mcp,
+                        action: "mcp.rollback_completed_target".to_string(),
+                        resource_id: plan.resource_id.clone(),
+                        source_analysis_handle: None,
+                        item_ids: Some(vec![backup_id.clone()]),
+                    },
+                });
+            }
+            LifecycleItemResult {
+                id: format!(
+                    "{}:{}",
+                    plan.resource_id,
+                    mcp_client_label(&target.client).to_ascii_lowercase()
+                ),
+                label: format!("{} client configuration", mcp_client_label(&target.client)),
+                status,
+                receipt: target.receipt_id.clone(),
+                redacted_detail: target.redacted_detail.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    if outcome.failed > 0 && outcome.completed > 0 {
+        recovery_actions.push(LifecycleFollowUpAction {
+            id: format!("keep-partial:{}", plan.resource_id),
+            label: "Keep completed MCP client bindings".to_string(),
+            plan_request: LifecyclePlanRequest {
+                resource_kind: LifecycleResourceKind::Mcp,
+                action: "mcp.keep_partial".to_string(),
+                resource_id: plan.resource_id.clone(),
+                source_analysis_handle: None,
+                item_ids: None,
+            },
+        });
+    }
+    let status = if outcome.failed > 0 && outcome.completed > 0 {
+        LifecycleExecutionStatus::Partial
+    } else if outcome.failed > 0 {
+        LifecycleExecutionStatus::Failed
+    } else {
+        LifecycleExecutionStatus::Success
+    };
+    LifecycleExecutionResult {
+        operation_id: operation_id.to_string(),
+        plan_digest: plan.digest.clone(),
+        status,
+        completed_steps: outcome.completed,
+        total_steps: outcome.targets.len(),
+        can_cancel: false,
+        receipt: outcome
+            .targets
+            .iter()
+            .find_map(|target| target.receipt_id.clone()),
+        redacted_detail: format!(
+            "MCP lifecycle completed {} client target(s), failed {}, skipped {}.",
+            outcome.completed,
+            outcome.failed,
+            outcome
+                .targets
+                .len()
+                .saturating_sub(outcome.completed + outcome.failed)
+        ),
+        items,
+        retry_actions,
+        recovery_actions,
+    }
+}
+
+fn mcp_retry_item_ids(plan: &LifecyclePlan, failed_client: &McpClientName) -> Vec<String> {
+    let mut item_ids = plan
+        .request
+        .item_ids
+        .as_ref()
+        .into_iter()
+        .flatten()
+        .filter(|item| !is_mcp_client_selector(item))
+        .cloned()
+        .collect::<Vec<_>>();
+    item_ids.push(mcp_client_label(failed_client).to_string());
+    item_ids
+}
+
+fn is_mcp_client_selector(value: &str) -> bool {
+    matches!(
+        value
+            .trim()
+            .to_ascii_lowercase()
+            .replace(['-', '_'], " ")
+            .as_str(),
+        "codex" | "claude" | "claude code" | "cursor"
+    )
+}
+
+fn mcp_client_label(client: &McpClientName) -> &'static str {
+    match client {
+        McpClientName::Codex => "Codex",
+        McpClientName::ClaudeCode => "Claude Code",
+        McpClientName::Cursor => "Cursor",
+    }
+}
+
+fn skill_client_label(client: &SkillClientName) -> &'static str {
+    match client {
+        SkillClientName::Codex => "Codex",
+        SkillClientName::ClaudeCode => "Claude Code",
+        SkillClientName::AgentKit => "AgentKit",
     }
 }
 
@@ -1118,6 +1810,7 @@ fn initial_result(plan: &LifecyclePlan, operation_id: &str) -> LifecycleExecutio
             plan.execution,
             LifecycleExecution::ManagedExecute { .. }
                 | LifecycleExecution::SignedProductUpdate { .. }
+                | LifecycleExecution::ManagedConfigMutation { .. }
                 | LifecycleExecution::Batch { .. }
         ),
         receipt: None,
@@ -1380,9 +2073,9 @@ fn manager_keys(plan: &LifecyclePlan) -> Vec<String> {
             managers.dedup();
             managers
         }
-        LifecycleExecution::VendorHandoff { .. } | LifecycleExecution::DetectOnly { .. } => {
-            Vec::new()
-        }
+        LifecycleExecution::ManagedConfigMutation { .. }
+        | LifecycleExecution::VendorHandoff { .. }
+        | LifecycleExecution::DetectOnly { .. } => Vec::new(),
     }
 }
 
@@ -1414,6 +2107,81 @@ fn request_for_source(
         source_analysis_handle: Some(handle.to_string()),
         item_ids: None,
     }
+}
+
+fn skill_source_identity(value: &str) -> Result<(String, Option<String>), CoreError> {
+    let parsed = url::Url::parse(value)?;
+    if parsed.scheme() != "https"
+        || parsed.host_str() != Some("github.com")
+        || parsed.port().is_some()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || parsed.path().contains('%')
+        || parsed.path().contains('\\')
+    {
+        return Err(CoreError::MalformedInput(
+            "skill source must be a canonical credential-free GitHub HTTPS URL".to_string(),
+        ));
+    }
+    let segments = parsed
+        .path_segments()
+        .into_iter()
+        .flatten()
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return Err(CoreError::MalformedInput(
+            "skill source must identify a GitHub repository".to_string(),
+        ));
+    }
+    let owner = segments[0];
+    let repository = segments[1].strip_suffix(".git").unwrap_or(segments[1]);
+    let valid_owner = !owner.is_empty()
+        && owner.len() <= 39
+        && !owner.starts_with('-')
+        && !owner.ends_with('-')
+        && owner
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-');
+    let valid_repository = !repository.is_empty()
+        && repository.len() <= 100
+        && repository != "."
+        && repository != ".."
+        && repository
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
+    if !valid_owner || !valid_repository {
+        return Err(CoreError::MalformedInput(
+            "skill repository identity is not canonical".to_string(),
+        ));
+    }
+    let subpath = if segments.len() == 2 {
+        None
+    } else if segments.len() >= 5 && segments[2] == "tree" && !segments[3].is_empty() {
+        let parts = &segments[4..];
+        if parts.iter().any(|part| {
+            part.is_empty()
+                || matches!(*part, "." | ".." | ".git")
+                || !part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        }) {
+            return Err(CoreError::InvalidPath(
+                "skill source subpath is not canonical".to_string(),
+            ));
+        }
+        Some(parts.join("/"))
+    } else {
+        return Err(CoreError::MalformedInput(
+            "skill source must identify a repository or repository tree subpath".to_string(),
+        ));
+    };
+    Ok((
+        format!("https://github.com/{owner}/{repository}.git"),
+        subpath,
+    ))
 }
 
 fn source_identity(value: &str) -> Result<String, CoreError> {

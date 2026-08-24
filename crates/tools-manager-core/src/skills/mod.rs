@@ -22,6 +22,8 @@ use crate::{
     error::CoreError,
 };
 
+mod runtime_inventory;
+
 const MAX_SKILL_FILES: usize = 32;
 const MAX_SKILL_BYTES: usize = 128 * 1024;
 static MATERIALIZED_HOME_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -86,6 +88,9 @@ pub fn scan_skills(
     workspace: &FixtureWorkspace,
     versions: &VersionCatalog,
 ) -> Result<SkillInventorySnapshot, CoreError> {
+    if workspace.has_skill_home_override() {
+        return runtime_inventory::scan_runtime_skills(workspace, versions);
+    }
     let declarations: Vec<SkillRootDeclaration> =
         workspace.read_json("tests/fixtures/roots/skill-roots.json")?;
     let receipts: Vec<ManagedSkillReceipt> =

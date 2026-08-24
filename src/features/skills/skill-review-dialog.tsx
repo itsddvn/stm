@@ -18,7 +18,7 @@ export function SkillReviewDialog({ skill, open, onClose }: { skill: SkillViewMo
   }), [actionId, skill]);
   const lifecycle = useLifecycleOperation(request, open);
   const needsChoice = skill.resolutionActions.length > 0;
-  const canStart = lifecycle.consented && lifecycle.consentEligible && (!needsChoice || Boolean(selectedResolutionAction?.enabled));
+  const canStart = !lifecycle.starting && lifecycle.consented && lifecycle.consentEligible && (!needsChoice || Boolean(selectedResolutionAction?.enabled));
   const modified = skill.primaryAction.id === "skill.resolve_local_modification";
   const partial = skill.primaryAction.id === "skill.review_partial_failure";
 

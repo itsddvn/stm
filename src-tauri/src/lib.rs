@@ -1,19 +1,38 @@
 use tauri::Manager;
 
 mod commands;
+mod product_update;
+mod product_update_contract;
+mod product_update_receipt;
+mod signed_update_metadata;
 mod state;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+    let context = tauri::generate_context!();
+    let updater_enabled = context.config().plugins.0.contains_key("updater");
+    let builder =
+        tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-        }))
-        .manage(state::AppState::new(env!("CARGO_MANIFEST_DIR")))
+        }));
+    let builder = if updater_enabled {
+        builder.plugin(tauri_plugin_updater::Builder::new().build())
+    } else {
+        builder
+    };
+    builder
+        .manage(state::AppState::new_runtime(env!("CARGO_MANIFEST_DIR")))
+        .manage(product_update::ProductUpdateRuntime::new(updater_enabled))
+        .setup(|app| {
+            app.state::<product_update::ProductUpdateRuntime>()
+                .reconcile_startup(app.handle())
+                .map_err(std::io::Error::other)?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::refresh_snapshot,
             commands::refresh_status,
@@ -34,6 +53,6 @@ pub fn run() {
             commands::cancel_operation,
             commands::run_diagnostics,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running STM");
 }

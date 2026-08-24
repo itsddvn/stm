@@ -13,7 +13,7 @@ Status: backend standards established in Phase 2 on 2026-08-20.
 
 - No shell strings. Process execution always uses allowlisted executables with explicit arg arrays.
 - Reject project-local skill roots and path escapes after normalization plus canonicalization.
-- Never store raw MCP secret values. Persist only redacted references or state.
+- Never store raw MCP secret values in SQLite, receipts, logs, diagnostics, screenshots, or plaintext files. Persist references only; backup complete client configs exclusively through authenticated encryption with an operating-system credential-store key.
 - Treat source URLs as untrusted input. Strip fragments and queries before recording them.
 
 ## Data contracts

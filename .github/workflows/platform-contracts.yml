@@ -44,6 +44,9 @@ jobs:
       - name: Run lifecycle core contracts
         run: cargo test -p tools-manager-core
 
+      - name: Run MCP client configuration and recovery contracts
+        run: cargo test -p tools-manager-core mcp
+
   disposable-homebrew-lifecycle:
     name: Disposable macOS manager lifecycles
     runs-on: macos-latest

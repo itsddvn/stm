@@ -13,6 +13,8 @@ use crate::{
     error::CoreError,
 };
 
+mod runtime;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolUpdateEvidence {
@@ -50,6 +52,9 @@ pub struct VersionCatalog {
 }
 
 pub fn load_version_catalog(workspace: &FixtureWorkspace) -> Result<VersionCatalog, CoreError> {
+    if workspace.has_skill_home_override() {
+        return runtime::load_runtime_version_catalog(workspace);
+    }
     let tool_updates: Vec<ToolUpdateEvidence> =
         workspace.read_json("tests/fixtures/tools/update-metadata.json")?;
     let skill_updates: Vec<SkillUpdateEvidence> =

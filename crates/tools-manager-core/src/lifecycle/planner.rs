@@ -18,6 +18,7 @@ use crate::{
     inventory::{
         current_native_linux_manager, current_platform_slug, mapping_for_platform, scan_inventory,
     },
+    skill_lifecycle::PreparedSkillMutation,
     skills::scan_skills,
     versioning::{build_application_updates, load_version_catalog},
 };
@@ -28,16 +29,25 @@ use super::{
         ExecutableIdentity,
     },
     evidence::{ManagerEvidencePort, ManagerStateEvidence},
+    skill_source::SkillSourceResolverPort,
     source_registry::SourceAnalysisBinding,
     time::{format_timestamp, PLAN_TTL},
 };
 
+#[derive(Debug, Clone)]
+pub(crate) enum PreparedSkillAction {
+    Materialize(Box<PreparedSkillMutation>),
+    RestoreBackup(String),
+    KeepPartial,
+}
 #[derive(Debug, Clone)]
 pub(crate) struct PreparedPlan {
     pub plan: LifecyclePlan,
     pub evidence_fingerprint: String,
     pub executable_identities: Vec<ExecutableIdentity>,
     pub children: Vec<PreparedPlan>,
+    pub skill_action: Option<PreparedSkillAction>,
+    pub mcp_action: Option<crate::mcp::lifecycle::PreparedMcpAction>,
 }
 
 struct ToolPlanContext<'a> {
@@ -53,15 +63,36 @@ pub(crate) fn prepare_plan(
     manager_evidence: &dyn ManagerEvidencePort,
     request: LifecyclePlanRequest,
     source: Option<&SourceAnalysisBinding>,
+    skill_resolver: &dyn SkillSourceResolverPort,
     sequence: u64,
     now: SystemTime,
 ) -> Result<PreparedPlan, CoreError> {
     if request.resource_kind == LifecycleResourceKind::Operation && request.action == "update-queue"
     {
-        return prepare_batch(workspace, manager_evidence, request, sequence, now);
+        return prepare_batch(
+            workspace,
+            manager_evidence,
+            skill_resolver,
+            request,
+            sequence,
+            now,
+        );
     }
     if request.resource_kind == LifecycleResourceKind::Tool {
         return prepare_tool(workspace, manager_evidence, request, source, sequence, now);
+    }
+    if request.resource_kind == LifecycleResourceKind::Skill {
+        return super::skill_planner::prepare_skill(
+            workspace,
+            skill_resolver,
+            request,
+            source,
+            sequence,
+            now,
+        );
+    }
+    if request.resource_kind == LifecycleResourceKind::Mcp {
+        return super::mcp_planner::prepare_mcp(workspace, request, source, sequence, now);
     }
     prepare_review_only(
         request,
@@ -345,12 +376,15 @@ fn build_tool_plan(
         evidence_fingerprint,
         executable_identities: identities,
         children: Vec::new(),
+        skill_action: None,
+        mcp_action: None,
     })
 }
 
 fn prepare_batch(
     workspace: &FixtureWorkspace,
     manager_evidence: &dyn ManagerEvidencePort,
+    skill_resolver: &dyn SkillSourceResolverPort,
     request: LifecyclePlanRequest,
     sequence: u64,
     now: SystemTime,
@@ -411,6 +445,7 @@ fn prepare_batch(
             manager_evidence,
             child_request,
             None,
+            skill_resolver,
             sequence.saturating_mul(1000) + index as u64 + 1,
             now,
         )?;
@@ -462,10 +497,12 @@ fn prepare_batch(
         evidence_fingerprint,
         executable_identities: identities,
         children: prepared_children,
+        skill_action: None,
+        mcp_action: None,
     })
 }
 
-fn prepare_review_only(
+pub(super) fn prepare_review_only(
     request: LifecyclePlanRequest,
     sequence: u64,
     now: SystemTime,
@@ -511,6 +548,8 @@ fn prepare_review_only(
         evidence_fingerprint,
         executable_identities: Vec::new(),
         children: Vec::new(),
+        skill_action: None,
+        mcp_action: None,
     })
 }
 
@@ -535,7 +574,7 @@ fn source_authorizes_entry(
         && source.resource_id.as_deref() == Some(entry.id.as_str())
 }
 
-fn opaque_plan_id(
+pub(super) fn opaque_plan_id(
     sequence: u64,
     request: &LifecyclePlanRequest,
     now: SystemTime,
@@ -546,7 +585,7 @@ fn opaque_plan_id(
     Ok(format!("lifecycle-plan-{}", &digest[7..23]))
 }
 
-fn plan_digest(plan: &LifecyclePlan) -> Result<String, CoreError> {
+pub(super) fn plan_digest(plan: &LifecyclePlan) -> Result<String, CoreError> {
     let mut unsigned = plan.clone();
     unsigned.digest.clear();
     Ok(compute_sha256([serde_json::to_vec(&unsigned)?]))

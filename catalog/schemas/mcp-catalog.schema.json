@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/stm/mcp-catalog.schema.json",
+  "title": "STM Approved MCP Mapping Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "mappings"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "mappings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "aliases",
+          "transport",
+          "commandOrUrl",
+          "argsPrefix",
+          "allowAbsoluteTrailingArgs",
+          "capabilities",
+          "clients",
+          "authRequired",
+          "authReferences"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "aliases": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "transport": { "enum": ["stdio", "streamable_http", "sse"] },
+          "commandOrUrl": { "type": "string", "minLength": 1 },
+          "argsPrefix": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "allowAbsoluteTrailingArgs": { "type": "boolean" },
+          "capabilities": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "resources",
+                "tools",
+                "prompts",
+                "logging",
+                "completions",
+                "roots",
+                "sampling",
+                "elicitation"
+              ]
+            }
+          },
+          "clients": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["codex", "claude_code", "cursor"] }
+          },
+          "authRequired": { "type": "boolean" },
+          "authReferences": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "reference"],
+              "properties": {
+                "kind": { "enum": ["env_var", "token_alias", "header_name"] },
+                "reference": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

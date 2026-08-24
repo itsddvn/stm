@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/itsddvn/stm-skill-catalog/main/schemas/skill-catalog-signature.schema.json",
+  "title": "STM Skill Catalog Detached Signature",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "algorithm", "keyId", "signature"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "algorithm": { "const": "Ed25519" },
+    "keyId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,99}$"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/]{86}==$",
+      "description": "Canonical padded base64 encoding of the 64-byte Ed25519 signature over the exact manifest bytes."
+    }
+  }
+}

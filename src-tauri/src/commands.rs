@@ -10,14 +10,14 @@ use tools_manager_core::{
     domain::{
         lifecycle::{
             LifecycleConsentAuthorization, LifecycleExecutionResult, LifecyclePlan,
-            LifecyclePlanRequest,
+            LifecyclePlanRequest, LifecycleResourceKind,
         },
         source::SourceKind,
     },
     CoreError,
 };
 
-use crate::state::AppState;
+use crate::{product_update::ProductUpdateRuntime, state::AppState};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -92,8 +92,14 @@ pub fn list_updates(state: State<'_, AppState>) -> CommandResult<Vec<UpdateViewM
 }
 
 #[tauri::command]
-pub fn list_operations(state: State<'_, AppState>) -> CommandResult<Vec<OperationViewModelDto>> {
-    state.service().list_operations().map_err(render_error)
+pub fn list_operations(
+    state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
+) -> CommandResult<Vec<OperationViewModelDto>> {
+    let mut operations = state.service().list_operations().map_err(render_error)?;
+    operations.extend(product_updates.operation_views()?);
+    operations.sort_by(|left, right| right.started_at.cmp(&left.started_at));
+    Ok(operations)
 }
 
 #[tauri::command]
@@ -108,48 +114,70 @@ pub fn analyze_source(
         .map_err(render_error)
 }
 #[tauri::command]
-pub fn prepare_lifecycle_plan(
+pub async fn prepare_lifecycle_plan(
+    app: AppHandle,
     request: LifecyclePlanRequest,
     state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
 ) -> CommandResult<LifecyclePlan> {
-    state
-        .service()
-        .prepare_lifecycle(request)
-        .map_err(render_error)
+    if request.resource_kind == LifecycleResourceKind::Product {
+        product_updates.prepare(&app, request).await
+    } else {
+        state
+            .service()
+            .prepare_lifecycle(request)
+            .map_err(render_error)
+    }
 }
 
 #[tauri::command]
-pub fn start_lifecycle_operation(
+pub async fn start_lifecycle_operation(
+    app: AppHandle,
     plan_id: String,
     authorization: LifecycleConsentAuthorization,
     state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
 ) -> CommandResult<LifecycleExecutionResult> {
-    state
-        .service()
-        .start_lifecycle(&plan_id, authorization)
-        .map_err(render_error)
+    if product_updates.contains_plan(&plan_id) {
+        product_updates.start(&app, &plan_id, authorization).await
+    } else {
+        state
+            .service()
+            .start_lifecycle(&plan_id, authorization)
+            .map_err(render_error)
+    }
 }
 
 #[tauri::command]
 pub fn lifecycle_operation_status(
     operation_id: String,
     state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
 ) -> CommandResult<LifecycleExecutionResult> {
-    state
-        .service()
-        .lifecycle_status(&operation_id)
-        .map_err(render_error)
+    if product_updates.contains_operation(&operation_id) {
+        product_updates.status(&operation_id)
+    } else {
+        state
+            .service()
+            .lifecycle_status(&operation_id)
+            .map_err(render_error)
+    }
 }
 
 #[tauri::command]
 pub fn cancel_lifecycle_operation(
     operation_id: String,
     state: State<'_, AppState>,
+    product_updates: State<'_, ProductUpdateRuntime>,
 ) -> CommandResult<LifecycleExecutionResult> {
-    state
-        .service()
-        .cancel_lifecycle(&operation_id)
-        .map_err(render_error)
+    if product_updates.contains_operation(&operation_id) {
+        product_updates.status(&operation_id)
+    } else {
+        state
+            .service()
+            .cancel_lifecycle(&operation_id)
+            .map_err(render_error)
+    }
 }
 
 #[tauri::command]

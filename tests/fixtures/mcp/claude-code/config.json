@@ -6,7 +6,7 @@
       "capabilities": ["resources", "tools"]
     },
     "Sentry": {
-      "url": "https://mcp.sentry.dev/sse?token=secret-fragment#ignored",
+      "url": "https://mcp.sentry.dev/sse",
       "transport": "sse",
       "authRequired": true,
       "capabilities": ["tools"]

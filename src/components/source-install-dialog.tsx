@@ -15,7 +15,7 @@ const sourceCopy: Record<SourceKind, { title: string; description: string; place
   mcp: { title: "Add MCP Server", description: "Analyze endpoint provenance before reviewing global client configuration.", placeholder: "https://mcp.sentry.dev/mcp" },
 };
 
-export function SourceInstallDialog({ kind, open, onClose, initialUrl = "", title, mcpAction, mcpServerId }: {
+export function SourceInstallDialog({ kind, open, onClose, initialUrl = "", title, mcpAction, mcpServerId, directRequest }: {
   kind: SourceKind;
   open: boolean;
   onClose: () => void;
@@ -23,22 +23,27 @@ export function SourceInstallDialog({ kind, open, onClose, initialUrl = "", titl
   title?: string;
   mcpAction?: McpPresentationAction;
   mcpServerId?: string;
+  directRequest?: LifecyclePlanRequest;
 }) {
-  const [sourceStage, setSourceStage] = useState<"input" | "review">("input");
+  const [sourceStage, setSourceStage] = useState<"input" | "review">(directRequest ? "review" : "input");
   const [url, setUrl] = useState("");
   const [analysis, setAnalysis] = useState<SourceAnalysisViewModel | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const copy = sourceCopy[kind];
-  const request = useMemo(() => analysis?.status === "review_ready" ? buildSourceLifecycleRequest(analysis, mcpAction, mcpServerId) : null, [analysis, mcpAction, mcpServerId]);
+  const request = useMemo(
+    () => directRequest ?? (analysis?.status === "review_ready" ? buildSourceLifecycleRequest(analysis, mcpAction, mcpServerId) : null),
+    [analysis, directRequest, mcpAction, mcpServerId],
+  );
   const lifecycle = useLifecycleOperation(request, open && sourceStage === "review");
+  const lifecycleReady = directRequest !== undefined || analysis?.status === "review_ready";
 
   useLayoutEffect(() => {
     if (!open) return;
-    setSourceStage("input");
+    setSourceStage(directRequest ? "review" : "input");
     setUrl(initialUrl);
     setAnalysis(null);
     setAnalyzing(false);
-  }, [initialUrl, kind, open]);
+  }, [directRequest, initialUrl, kind, open]);
 
   async function analyze(event: FormEvent) {
     event.preventDefault();
@@ -56,27 +61,33 @@ export function SourceInstallDialog({ kind, open, onClose, initialUrl = "", titl
     <><button className="secondary-button" type="button" onClick={() => setSourceStage("input")}>Back</button><button className="primary-button" type="button" onClick={onClose}>Close</button></>
   ) : (
     <>
-      <button className="secondary-button" type="button" onClick={lifecycle.stage === "review" ? () => setSourceStage("input") : onClose}>{lifecycle.stage === "review" ? "Back" : "Close"}</button>
-      {lifecycle.stage === "review" ? <button className="primary-button" type="button" disabled={!lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}><AppIcon name="run" />Authorize &amp; Start</button> : null}
+      <button className="secondary-button" type="button" onClick={lifecycle.stage === "review" && !directRequest ? () => setSourceStage("input") : onClose}>{lifecycle.stage === "review" && !directRequest ? "Back" : "Close"}</button>
+      {lifecycle.stage === "review" ? <button className="primary-button" type="button" disabled={lifecycle.starting || !lifecycle.consented || !lifecycle.consentEligible} onClick={() => void lifecycle.start()}><AppIcon name="run" />Authorize &amp; Start</button> : null}
       {lifecycle.stage === "progress" && lifecycle.result?.canCancel ? <button className="secondary-button" type="button" onClick={() => void lifecycle.cancel()}>Cancel Operation</button> : null}
       {lifecycle.stage === "progress" ? <button className="primary-button" type="button" onClick={() => void lifecycle.refreshStatus()}>Refresh Status</button> : null}
     </>
   );
 
   return (
-    <FixtureDialog open={open} onClose={onClose} title={title ?? copy.title} description={copy.description} footer={footer}>
+    <FixtureDialog
+      open={open}
+      onClose={onClose}
+      title={title ?? copy.title}
+      description={directRequest ? "Review digest-bound lifecycle evidence before changing supported global client configurations." : copy.description}
+      footer={footer}
+    >
       {sourceStage === "input" ? (
         <form id={`${kind}-source-form`} className="source-form" onSubmit={analyze}>
           <label htmlFor={`${kind}-source-url`}>HTTPS source URL</label>
           <div className="source-url-control"><AppIcon name="link" /><input id={`${kind}-source-url`} type="url" inputMode="url" autoComplete="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder={copy.placeholder} required /></div>
           {isFixtureRuntime() ? <div className="simulation-banner"><AppIcon name="info" /><div><strong>Deterministic source simulation</strong><p>This mode validates fixture input through the typed runtime boundary. This run does not fetch or modify the system.</p></div></div> : null}
         </form>
-      ) : analysis ? (
+      ) : (
         <>
-          <SourceAnalysisSummary analysis={analysis} />
-          {analysis.status === "review_ready" && lifecycle.stage === "loading" ? <p className="dialog-loading">Preparing digest-bound lifecycle evidence…</p> : null}
-          {analysis.status === "review_ready" && lifecycle.stage === "review" && lifecycle.plan ? <LifecyclePlanReview plan={lifecycle.plan} consented={lifecycle.consented} onConsentChange={lifecycle.setConsented} /> : null}
-          {analysis.status === "review_ready" && (lifecycle.stage === "progress" || lifecycle.stage === "result") && lifecycle.plan && lifecycle.result ? (
+          {analysis ? <SourceAnalysisSummary analysis={analysis} /> : null}
+          {lifecycleReady && lifecycle.stage === "loading" ? <p className="dialog-loading">Preparing digest-bound lifecycle evidence…</p> : null}
+          {lifecycleReady && lifecycle.stage === "review" && lifecycle.plan ? <LifecyclePlanReview plan={lifecycle.plan} consented={lifecycle.consented} onConsentChange={lifecycle.setConsented} /> : null}
+          {lifecycleReady && (lifecycle.stage === "progress" || lifecycle.stage === "result") && lifecycle.plan && lifecycle.result ? (
             <LifecycleExecutionState
               plan={lifecycle.plan}
               result={lifecycle.result}
@@ -91,7 +102,7 @@ export function SourceInstallDialog({ kind, open, onClose, initialUrl = "", titl
             />
           ) : null}
         </>
-      ) : null}
+      )}
     </FixtureDialog>
   );
 }

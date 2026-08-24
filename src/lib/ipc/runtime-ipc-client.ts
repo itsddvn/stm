@@ -1,5 +1,5 @@
 import type { ScenarioId } from "../../../contracts/ui/state-contract";
-import type { AppViewModel, SourceAnalysisViewModel, SourceKind } from "../../../contracts/ui/view-model-contract";
+import type { AppViewModel, OperationViewModel, SourceAnalysisViewModel, SourceKind } from "../../../contracts/ui/view-model-contract";
 import type { LifecycleConsentAuthorization, LifecycleExecutionResult, LifecyclePlan, LifecyclePlanRequest } from "../../../contracts/ui/lifecycle-contract";
 import { mockIpcClient, type ToolsManagerIpcClient } from "./mock-ipc-client";
 
@@ -47,6 +47,7 @@ export interface RuntimeIpcClient extends ToolsManagerIpcClient {
   startRefresh(): Promise<AppViewModel>;
   getRefreshStatus(): Promise<RefreshStatus>;
   cancelRefresh(operationId: string): Promise<boolean>;
+  listOperations(): Promise<OperationViewModel[]>;
   runDiagnostics(): Promise<DiagnosticsReport>;
 }
 
@@ -93,6 +94,10 @@ class FixtureRuntimeClient implements RuntimeIpcClient {
       snapshot,
       result: "success",
     };
+  }
+
+  async listOperations(): Promise<OperationViewModel[]> {
+    return (await mockIpcClient.getAppView("success")).operations;
   }
 
   async cancelRefresh() {
@@ -182,6 +187,10 @@ class TauriRuntimeClient implements RuntimeIpcClient {
 
   async cancelRefresh(operationId: string): Promise<boolean> {
     return this.invoke<boolean>("cancel_operation", { operationId });
+  }
+
+  async listOperations(): Promise<OperationViewModel[]> {
+    return this.invoke<OperationViewModel[]>("list_operations");
   }
 
   async runDiagnostics(): Promise<DiagnosticsReport> {

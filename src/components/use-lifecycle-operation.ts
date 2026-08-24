@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   LifecycleExecutionResult,
   LifecycleFollowUpAction,
@@ -30,6 +30,8 @@ export function useLifecycleOperation(request: LifecyclePlanRequest | null, open
     stage: "loading",
   });
   const [consent, setConsent] = useState<ConsentState>({ evidenceKey: "", checked: false });
+  const startingRef = useRef(false);
+  const [starting, setStarting] = useState(false);
   const current = operation.requestKey === requestKey
     ? operation
     : { requestKey, plan: null, result: null, stage: "loading" as const };
@@ -39,28 +41,41 @@ export function useLifecycleOperation(request: LifecyclePlanRequest | null, open
   const consented = consentEligible && consent.evidenceKey === consentEvidenceKey && consent.checked;
 
   useEffect(() => {
-    if (!open || !request) return;
+    if (!open || requestKey === "null") return;
+    const preparedRequest = JSON.parse(requestKey) as LifecyclePlanRequest;
     let active = true;
-    void runtimeIpcClient.prepareLifecycle(request).then((nextPlan) => {
+    void runtimeIpcClient.prepareLifecycle(preparedRequest).then((nextPlan) => {
       if (!active) return;
       setOperation({ requestKey, plan: nextPlan, result: null, stage: "review" });
     });
     return () => { active = false; };
-  }, [open, request, requestKey]);
+  }, [open, requestKey]);
 
   function setConsented(checked: boolean) {
     setConsent({ evidenceKey: consentEvidenceKey, checked });
   }
 
   async function start() {
-    if (!plan || !consented || !isLifecycleConsentEligible(plan)) return;
-    const nextResult = await runtimeIpcClient.startLifecycle(plan.planId, {
-      planDigest: plan.digest,
-      planExpiresAt: plan.expiresAt,
-      grantedAt: new Date().toISOString(),
-    });
-    setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult) });
-    notifyLifecycleSettled(nextResult);
+    if (
+      startingRef.current
+      || !plan
+      || !consented
+      || !isLifecycleConsentEligible(plan)
+    ) return;
+    startingRef.current = true;
+    setStarting(true);
+    try {
+      const nextResult = await runtimeIpcClient.startLifecycle(plan.planId, {
+        planDigest: plan.digest,
+        planExpiresAt: plan.expiresAt,
+        grantedAt: new Date().toISOString(),
+      });
+      setOperation({ requestKey, plan, result: nextResult, stage: lifecycleStageForResult(nextResult) });
+      notifyLifecycleSettled(nextResult);
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
+    }
   }
 
   async function refreshStatus() {
@@ -82,7 +97,7 @@ export function useLifecycleOperation(request: LifecyclePlanRequest | null, open
     setOperation({ requestKey, plan: nextPlan, result: null, stage: "review" });
   }
 
-  return { plan, result, stage, consented, consentEligible, setConsented, start, refreshStatus, cancel, reviewFollowUp };
+  return { plan, result, stage, starting, consented, consentEligible, setConsented, start, refreshStatus, cancel, reviewFollowUp };
 }
 
 function notifyLifecycleSettled(result: LifecycleExecutionResult) {

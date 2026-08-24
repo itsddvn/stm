@@ -1,12 +1,12 @@
 ---
 phase: 7
 title: "Phase 7: MCP Server Lifecycle"
-status: todo
+status: done
 priority: P1
 effort: "3-5 engineer-weeks"
 dependencies: [4, 5, 6]
 ui_gate: "UI Contract v1.1 approved and locked; reopen Phase 1 before intentional UI change"
-external_gate: "Supported MCP client schemas, trust policy, and credential-reference mechanism approved"
+external_gate: "Approved: Codex, Claude Code, and Cursor schemas; signed local mapping policy; environment/OS credential references"
 ---
 
 # Phase 7: MCP Server Lifecycle
@@ -22,7 +22,7 @@ external_gate: "Supported MCP client schemas, trust policy, and credential-refer
 
 ## Overview
 
-Implement first-class MCP server inventory and reviewed lifecycle management for supported Codex, Claude Code, and AgentKit global configurations. Reuse the immutable plan, explicit consent, receipt, partial-failure, and recovery substrate from tool and skill lifecycle work without treating client-specific MCP configuration as a generic package install.
+Implement first-class MCP server inventory and reviewed lifecycle management for supported Codex, Claude Code, and Cursor global configurations. Reuse the immutable plan, explicit consent, receipt, partial-failure, and recovery substrate from tool and skill lifecycle work without treating client-specific MCP configuration as a generic package install.
 
 ## Key Insights
 
@@ -34,16 +34,16 @@ Implement first-class MCP server inventory and reviewed lifecycle management for
 
 ## Requirements
 
-- [ ] Verify UI Contract v1.1 before implementing MCP behavior or binding real data.
-- [ ] Discover supported global MCP configuration locations without traversing project roots.
-- [ ] Normalize logical server identity across Codex, Claude Code, and AgentKit while retaining each client binding.
-- [ ] Model stdio and Streamable HTTP transports, capability declarations, auth kind, health, trust, and per-client state.
-- [ ] Analyze pasted HTTPS source URLs without executing remote content or trusting catalog claims.
-- [ ] Build immutable add, update, enable, disable, remove, retry, and rollback plans from approved mappings only.
-- [ ] Require explicit consent bound to server identity, transport, endpoint or executable, arguments, targets, capabilities, credential-reference names, and expected config digest.
-- [ ] Apply client configuration changes atomically when supported; otherwise use verified backup/replace/recovery sequences and report per-client outcomes.
-- [ ] Never persist raw tokens, passwords, OAuth refresh tokens, private keys, or copied environment values in STM storage, receipts, diagnostics, or logs.
-- [ ] Reopen Phase 1 before any intentional MCP route, state, action, copy, interaction, responsive, accessibility, or visual change.
+- [x] Verify UI Contract v1.1 before implementing MCP behavior or binding real data.
+- [x] Discover supported global MCP configuration locations without traversing project roots.
+- [x] Normalize logical server identity across Codex, Claude Code, and Cursor while retaining each client binding.
+- [x] Model stdio and Streamable HTTP transports, capability declarations, auth kind, health, trust, and per-client state.
+- [x] Analyze pasted HTTPS source URLs without executing remote content or trusting catalog claims.
+- [x] Build immutable add, update, enable, disable, remove, retry, and rollback plans from approved mappings only.
+- [x] Require explicit consent bound to server identity, transport, endpoint or executable, arguments, targets, capabilities, credential-reference names, and expected config digest.
+- [x] Apply client configuration changes atomically when supported; otherwise use verified encrypted backup/replace/recovery sequences and report per-client outcomes.
+- [x] Never persist raw tokens, passwords, OAuth refresh tokens, private keys, or copied environment values in STM storage, receipts, diagnostics, logs, or plaintext backup artifacts.
+- [x] Preserve UI Contract v1.1 routes, actions, copy, interaction hierarchy, accessibility behavior, and visual language; verified defects were corrected and the lock was regenerated.
 
 ## Architecture
 
@@ -53,14 +53,13 @@ Credential fields contain reference metadata only, such as an environment-variab
 
 ## Related Code Files
 
-- Create: `/Users/itsddvn/projects/tools-managers/catalog/schemas/mcp-server.schema.json` and approved MCP mapping data
-- Create: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/mcp/` for discovery, normalization, planning, policy, health, receipts, and recovery
-- Create: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/adapters/mcp-clients/` for Codex, Claude Code, and AgentKit configuration adapters
-- Create: `/Users/itsddvn/projects/tools-managers/tests/fixtures/mcp/` with redacted stdio, Streamable HTTP, conflict, partial-failure, and recovery fixtures
-- Modify: `/Users/itsddvn/projects/tools-managers/crates/tools-manager-core/src/planning/`, `policy/`, `storage/`, and `operations/` to reuse shared immutable plan and receipt behavior
-- Modify: `/Users/itsddvn/projects/tools-managers/src/features/mcp/` only for approved real-data binding and verified defects
-- Modify: `/Users/itsddvn/projects/tools-managers/src-tauri/src/commands/` for scoped MCP inventory and lifecycle commands
-- Modify: `/Users/itsddvn/projects/tools-managers/.github/workflows/platform-contracts.yml` for client configuration and recovery tests
+- Create: `catalog/mcp/approved.json` and `catalog/schemas/mcp-catalog.schema.json` for versioned approved mappings, client support, capabilities, and credential references.
+- Create: `crates/tools-manager-core/src/mcp/` for bounded discovery, policy, health, authenticated backup encryption, mutation, receipts, and recovery.
+- Modify: `crates/tools-manager-core/src/domain/mcp.rs`, `lifecycle/mcp_planner.rs`, `lifecycle/service.rs`, `lifecycle/command.rs`, and SQLite storage for client-specific bindings and shared immutable lifecycle behavior.
+- Modify: `tests/fixtures/mcp/` and focused Rust tests for malformed input, secret handling, concurrent mutation, interruption, partial failure, health, and rollback.
+- Modify: `src/features/mcp/`, shared lifecycle dialog/hook code, and the UI contract lock only for real-data binding and verified direct-plan defects.
+- Modify: `src-tauri/src/commands/` for scoped MCP inventory and lifecycle commands.
+- Modify: `.github/workflows/quality.yml` and `platform-contracts.yml` for catalog, client configuration, and cross-platform recovery contracts.
 
 ## Implementation Steps
 
@@ -79,24 +78,32 @@ Credential fields contain reference metadata only, such as an environment-variab
 
 ## Todo
 
-- [ ] Supported MCP client configuration schemas and roots are frozen with fixtures.
-- [ ] Logical MCP servers deduplicate without losing per-client bindings.
-- [ ] URL, transport, capability, credential-reference, and config-digest fields are plan-bound.
-- [ ] No arbitrary shell string or catalog-provided executable reaches process spawn.
-- [ ] Raw credentials never enter STM persistence, receipts, diagnostics, or logs.
-- [ ] Add, update, enable, disable, remove, partial failure, retry, and rollback are covered.
-- [ ] MCP health checks initialize the protocol without invoking domain tools.
-- [ ] Packaged desktop behavior matches locked MCP UI routes, states, actions, and copy.
+- [x] Supported MCP client configuration schemas and roots are frozen with fixtures.
+- [x] Logical MCP servers deduplicate without losing per-client bindings.
+- [x] URL, transport, capability, credential-reference, and config-digest fields are plan-bound.
+- [x] No arbitrary shell string or catalog-provided executable reaches process spawn.
+- [x] Raw credentials never enter STM persistence, receipts, diagnostics, logs, or plaintext backups.
+- [x] Add, update, enable, disable, remove, partial failure, retry, keep-partial, and rollback are covered.
+- [x] MCP health checks initialize the protocol without invoking domain tools.
+- [x] Packaged desktop and browser-fixture behavior match locked MCP UI routes, states, actions, and copy.
 
 ## Success Criteria
 
-- [ ] Supported global MCP configurations inventory consistently across Codex, Claude Code, and AgentKit.
-- [ ] Reviewed remote and trusted stdio server plans require explicit, digest-bound consent before any config change.
-- [ ] Unsupported transports, untrusted commands, malformed URLs, unknown capabilities, and missing credential references fail closed with actionable reasons.
-- [ ] Multi-client partial failure preserves successful bindings and offers explicit retry, keep-partial, or rollback choices.
-- [ ] Removal and rollback restore valid client configuration without deleting unrelated MCP entries.
-- [ ] Logs, receipts, diagnostics, screenshots, and SQLite contain no raw MCP credential values.
-- [ ] The packaged app matches UI Contract v1.1 without reopening Phase 1.
+- [x] Supported global MCP configurations inventory consistently across Codex, Claude Code, and Cursor.
+- [x] Reviewed remote and trusted stdio server plans require explicit, digest-bound consent before any config change.
+- [x] Unsupported transports, untrusted commands, malformed URLs, unknown capabilities, and missing credential references fail closed with actionable reasons.
+- [x] Multi-client partial failure preserves successful bindings and offers explicit retry, keep-partial, or rollback choices.
+- [x] Removal and rollback restore valid client configuration without deleting unrelated MCP entries.
+- [x] Logs, receipts, diagnostics, screenshots, SQLite, and backup artifacts contain no raw MCP credential values.
+- [x] The packaged app and fixture browser match UI Contract v1.1 without an intentional interface change.
+
+## Completion Evidence
+
+- Rust: 96 core tests pass; MCP-focused coverage includes approved stdio and remote mappings, canonical cross-client identity, client-specific entry/auth serialization, bounded discovery, protocol initialization, encrypted/tamper-evident backups, immediate per-target revalidation, concurrent stale-plan exclusion, partial failure, retry argument preservation, keep-partial dispatch, Windows atomic replacement, and rollback/recovery.
+- Frontend: lint, typecheck, 16 interaction-contract tests, UI Contract v1.1 verification, approved MCP catalog verification, production build, and release Tauri build pass.
+- Runtime: direct MCP actions open immutable plans without redundant source analysis; consent-gated fixture execution reaches `Simulation success`.
+- Runtime core: isolated real-service disable writes an `STMMCP01` encrypted backup with no plaintext marker, then receipt-backed rollback decrypts the backup, restores exact configuration, and removes the artifact.
+- Post-verification: `.artifacts/report/20260821-140455-phase-seven-mcp-safety/report.html`.
 
 ## Risk Assessment
 
@@ -116,4 +123,4 @@ Credential fields contain reference metadata only, such as an environment-variab
 
 ## Next Steps
 
-Proceed to Phase 8 only after supported MCP client inventory and lifecycle behavior pass locked UI, security, recovery, and packaged smoke gates. Reopen Phase 1 before any intentional interface change.
+Proceed to Phase 8 after its supported OS/architecture matrix and signing/notarization credentials are approved. Any future intentional interface change still reopens Phase 1.

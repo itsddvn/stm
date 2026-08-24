@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use rusqlite::{params, Connection, OpenFlags};
+use rusqlite::{params, Connection, OpenFlags, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -21,6 +21,13 @@ use crate::{
         tool::ToolRecord,
     },
     error::CoreError,
+    mcp::lifecycle::{
+        McpBackupReceipt, McpBackupState, McpLifecycleReceipt, McpRecoveryPhase, McpRecoveryRecord,
+    },
+    skill_lifecycle::{
+        AuthenticatedCatalogStateRecord, BackupState, ManagedSkillReceipt, SkillBackupReceipt,
+        SkillRecoveryPhase, SkillRecoveryRecord,
+    },
 };
 
 const MIGRATIONS: &[(&str, &str)] = &[
@@ -35,6 +42,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
     (
         "0003_lifecycle_receipts.sql",
         include_str!("../../migrations/0003_lifecycle_receipts.sql"),
+    ),
+    (
+        "0004_skill_lifecycle.sql",
+        include_str!("../../migrations/0004_skill_lifecycle.sql"),
+    ),
+    (
+        "0005_mcp_lifecycle.sql",
+        include_str!("../../migrations/0005_mcp_lifecycle.sql"),
     ),
 ];
 static STORAGE_WRITES: Mutex<()> = Mutex::new(());
@@ -333,8 +348,554 @@ impl SqliteSnapshotStore {
             .collect()
     }
 
+    pub fn persist_authenticated_catalog_state(
+        &self,
+        state: &AuthenticatedCatalogStateRecord,
+    ) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        connection.execute(
+            "INSERT OR REPLACE INTO authenticated_skill_catalog_state (
+                channel, catalog_version, key_id, manifest_sha256, payload_sha256,
+                expires_at, activated_at, state_json
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                state.channel,
+                state.catalog_version,
+                state.key_id,
+                state.manifest_sha256,
+                state.payload_sha256,
+                state.expires_at,
+                state.activated_at,
+                serde_json::to_string(state)?,
+            ],
+        )?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn load_authenticated_catalog_state(
+        &self,
+        channel: &str,
+    ) -> Result<Option<AuthenticatedCatalogStateRecord>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let value = connection.query_row(
+            "SELECT state_json FROM authenticated_skill_catalog_state WHERE channel = ?1",
+            params![channel],
+            |row| row.get::<_, String>(0),
+        );
+        match value {
+            Ok(json) => Ok(Some(serde_json::from_str(&json)?)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub fn load_managed_skill_receipt(
+        &self,
+        target_key: &str,
+    ) -> Result<Option<ManagedSkillReceipt>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let value = connection.query_row(
+            "SELECT receipt_json FROM managed_skill_receipts WHERE target_key = ?1",
+            params![target_key],
+            |row| row.get::<_, String>(0),
+        );
+        match value {
+            Ok(json) => Ok(Some(serde_json::from_str(&json)?)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub fn load_managed_skill_receipts(
+        &self,
+    ) -> Result<Vec<(String, ManagedSkillReceipt)>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let mut statement = connection.prepare(
+            "SELECT target_key, receipt_json FROM managed_skill_receipts ORDER BY target_key",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|(key, json)| Ok((key, serde_json::from_str(&json)?)))
+            .collect()
+    }
+
+    pub fn persist_skill_recovery(&self, recovery: &SkillRecoveryRecord) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        connection.execute(
+            "INSERT OR REPLACE INTO skill_recovery_journal (
+                operation_id, target_key, phase, journal_json, recorded_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                recovery.operation_id,
+                recovery.target_key,
+                recovery_phase_label(&recovery.phase),
+                serde_json::to_string(recovery)?,
+                recovery.recorded_at,
+            ],
+        )?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn load_skill_recoveries(&self) -> Result<Vec<SkillRecoveryRecord>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let mut statement = connection.prepare(
+            "SELECT journal_json FROM skill_recovery_journal ORDER BY recorded_at, target_key",
+        )?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|json| Ok(serde_json::from_str(&json)?))
+            .collect()
+    }
+
+    pub fn load_skill_backup(
+        &self,
+        backup_id: &str,
+    ) -> Result<Option<SkillBackupReceipt>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let value = connection.query_row(
+            "SELECT receipt_json FROM skill_backup_receipts WHERE backup_id = ?1",
+            params![backup_id],
+            |row| row.get::<_, String>(0),
+        );
+        match value {
+            Ok(json) => Ok(Some(serde_json::from_str(&json)?)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub fn load_available_skill_backups(
+        &self,
+        skill_id: &str,
+    ) -> Result<Vec<SkillBackupReceipt>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let mut statement = connection.prepare(
+            "SELECT receipt_json
+             FROM skill_backup_receipts
+             WHERE state = 'available'
+             ORDER BY recorded_at DESC, backup_id",
+        )?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let receipts = rows
+            .into_iter()
+            .map(|json| serde_json::from_str::<SkillBackupReceipt>(&json))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(receipts
+            .into_iter()
+            .filter(|backup| {
+                backup
+                    .previous_receipts
+                    .iter()
+                    .any(|(_, receipt)| receipt.skill_id == skill_id)
+            })
+            .collect())
+    }
+
+    pub fn commit_skill_replacement(
+        &self,
+        receipts: &[(String, ManagedSkillReceipt)],
+        backup: Option<&SkillBackupReceipt>,
+        operation_id: &str,
+        target_key: &str,
+    ) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let mut connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let tx = connection.transaction()?;
+        for (key, receipt) in receipts {
+            tx.execute(
+                "INSERT OR REPLACE INTO managed_skill_receipts (
+                    target_key, skill_id, client, target_path, tree_sha256,
+                    source_commit, receipt_json, recorded_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    key,
+                    receipt.skill_id,
+                    serde_json::to_string(&receipt.target.client)?,
+                    receipt.target.target_path,
+                    receipt.tree_sha256,
+                    receipt.source.commit,
+                    serde_json::to_string(receipt)?,
+                    receipt.recorded_at,
+                ],
+            )?;
+        }
+        if let Some(backup) = backup {
+            tx.execute(
+                "INSERT OR REPLACE INTO skill_backup_receipts (
+                    backup_id, operation_id, target_key, state, receipt_json, recorded_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    backup.backup_id,
+                    backup.operation_id,
+                    backup.target_key,
+                    backup_state_label(&backup.state),
+                    serde_json::to_string(backup)?,
+                    backup.recorded_at,
+                ],
+            )?;
+        }
+        tx.execute(
+            "DELETE FROM skill_recovery_journal WHERE operation_id = ?1 AND target_key = ?2",
+            params![operation_id, target_key],
+        )?;
+        tx.commit()?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn commit_skill_backup_restore(
+        &self,
+        remove_target_keys: &[String],
+        restored_receipts: &[(String, ManagedSkillReceipt)],
+        backup: &SkillBackupReceipt,
+    ) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let mut connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let tx = connection.transaction()?;
+        for key in remove_target_keys {
+            tx.execute(
+                "DELETE FROM managed_skill_receipts WHERE target_key = ?1",
+                params![key],
+            )?;
+        }
+        for (key, receipt) in restored_receipts {
+            tx.execute(
+                "INSERT OR REPLACE INTO managed_skill_receipts (
+                    target_key, skill_id, client, target_path, tree_sha256,
+                    source_commit, receipt_json, recorded_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    key,
+                    receipt.skill_id,
+                    serde_json::to_string(&receipt.target.client)?,
+                    receipt.target.target_path,
+                    receipt.tree_sha256,
+                    receipt.source.commit,
+                    serde_json::to_string(receipt)?,
+                    receipt.recorded_at,
+                ],
+            )?;
+        }
+        tx.execute(
+            "UPDATE skill_backup_receipts SET state = ?1, receipt_json = ?2 WHERE backup_id = ?3",
+            params![
+                backup_state_label(&backup.state),
+                serde_json::to_string(backup)?,
+                backup.backup_id,
+            ],
+        )?;
+        tx.execute(
+            "DELETE FROM skill_recovery_journal WHERE operation_id = ?1 AND target_key = ?2",
+            params![backup.operation_id, backup.target_key],
+        )?;
+        tx.commit()?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn commit_skill_removal(
+        &self,
+        target_keys: &[String],
+        operation_id: &str,
+        target_key: &str,
+    ) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let mut connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let tx = connection.transaction()?;
+        for key in target_keys {
+            tx.execute(
+                "DELETE FROM managed_skill_receipts WHERE target_key = ?1",
+                params![key],
+            )?;
+        }
+        tx.execute(
+            "DELETE FROM skill_recovery_journal WHERE operation_id = ?1 AND target_key = ?2",
+            params![operation_id, target_key],
+        )?;
+        tx.commit()?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn persist_mcp_receipt(&self, receipt: &McpLifecycleReceipt) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        connection.execute(
+            "INSERT OR REPLACE INTO mcp_lifecycle_receipts (
+                receipt_id, operation_id, server_id, receipt_json, recorded_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                receipt.receipt_id,
+                receipt.operation_id,
+                receipt.server_id,
+                serde_json::to_string(receipt)?,
+                receipt.recorded_at,
+            ],
+        )?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn update_mcp_receipt_health(
+        &self,
+        receipt_id: &str,
+        health: crate::domain::mcp::McpHealthState,
+        recorded_at: &str,
+    ) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let receipt_json = connection.query_row(
+            "SELECT receipt_json FROM mcp_lifecycle_receipts WHERE receipt_id = ?1",
+            params![receipt_id],
+            |row| row.get::<_, String>(0),
+        )?;
+        let mut receipt: McpLifecycleReceipt = serde_json::from_str(&receipt_json)?;
+        receipt.health = health;
+        receipt.recorded_at = recorded_at.to_string();
+        connection.execute(
+            "UPDATE mcp_lifecycle_receipts
+             SET receipt_json = ?2, recorded_at = ?3
+             WHERE receipt_id = ?1",
+            params![receipt_id, serde_json::to_string(&receipt)?, recorded_at],
+        )?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn persist_mcp_backup(&self, backup: &McpBackupReceipt) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        connection.execute(
+            "INSERT OR REPLACE INTO mcp_backup_receipts (
+                backup_id, operation_id, server_id, client, state, receipt_json, recorded_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                backup.backup_id,
+                backup.operation_id,
+                backup.server_id,
+                serde_json::to_string(&backup.client)?,
+                mcp_backup_state_label(&backup.state),
+                serde_json::to_string(backup)?,
+                backup.recorded_at,
+            ],
+        )?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn finalize_mcp_activation(
+        &self,
+        receipt: &McpLifecycleReceipt,
+        backup: &McpBackupReceipt,
+    ) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let mut connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute(
+            "INSERT OR REPLACE INTO mcp_lifecycle_receipts (
+                receipt_id, operation_id, server_id, receipt_json, recorded_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                receipt.receipt_id,
+                receipt.operation_id,
+                receipt.server_id,
+                serde_json::to_string(receipt)?,
+                receipt.recorded_at,
+            ],
+        )?;
+        tx.execute(
+            "INSERT OR REPLACE INTO mcp_backup_receipts (
+                backup_id, operation_id, server_id, client, state, receipt_json, recorded_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                backup.backup_id,
+                backup.operation_id,
+                backup.server_id,
+                serde_json::to_string(&backup.client)?,
+                mcp_backup_state_label(&backup.state),
+                serde_json::to_string(backup)?,
+                backup.recorded_at,
+            ],
+        )?;
+        tx.execute(
+            "DELETE FROM mcp_recovery_journal WHERE operation_id = ?1 AND client = ?2",
+            params![
+                receipt.operation_id,
+                serde_json::to_string(&receipt.client)?
+            ],
+        )?;
+        tx.commit()?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn load_mcp_backup(&self, backup_id: &str) -> Result<Option<McpBackupReceipt>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let value = connection.query_row(
+            "SELECT receipt_json FROM mcp_backup_receipts WHERE backup_id = ?1",
+            params![backup_id],
+            |row| row.get::<_, String>(0),
+        );
+        match value {
+            Ok(json) => Ok(Some(serde_json::from_str(&json)?)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub fn load_available_mcp_backups(
+        &self,
+        server_id: &str,
+    ) -> Result<Vec<McpBackupReceipt>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let mut statement = connection.prepare(
+            "SELECT receipt_json
+             FROM mcp_backup_receipts
+             WHERE server_id = ?1 AND state = 'available'
+             ORDER BY recorded_at DESC, backup_id",
+        )?;
+        let rows = statement
+            .query_map(params![server_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|json| Ok(serde_json::from_str(&json)?))
+            .collect()
+    }
+
+    pub fn persist_mcp_recovery(&self, recovery: &McpRecoveryRecord) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        connection.execute(
+            "INSERT OR REPLACE INTO mcp_recovery_journal (
+                operation_id, client, phase, journal_json, recorded_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                recovery.operation_id,
+                serde_json::to_string(&recovery.client)?,
+                mcp_recovery_phase_label(&recovery.phase),
+                serde_json::to_string(recovery)?,
+                recovery.recorded_at,
+            ],
+        )?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
+    pub fn load_mcp_recoveries(&self) -> Result<Vec<McpRecoveryRecord>, CoreError> {
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        let mut statement = connection.prepare(
+            "SELECT journal_json FROM mcp_recovery_journal ORDER BY recorded_at, client",
+        )?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|json| Ok(serde_json::from_str(&json)?))
+            .collect()
+    }
+
+    pub fn delete_mcp_recovery(
+        &self,
+        operation_id: &str,
+        client: &crate::domain::mcp::McpClientName,
+    ) -> Result<(), CoreError> {
+        let _write = STORAGE_WRITES
+            .lock()
+            .unwrap_or_else(|value| value.into_inner());
+        let connection = open_connection(&self.db_path)?;
+        apply_migrations(&connection)?;
+        connection.execute(
+            "DELETE FROM mcp_recovery_journal WHERE operation_id = ?1 AND client = ?2",
+            params![operation_id, serde_json::to_string(client)?],
+        )?;
+        checkpoint_and_copy(&connection, &self.db_path, &self.last_good_path)
+    }
+
     pub fn recovered_from_corruption(&self) -> bool {
         self.recovered_from_corruption
+    }
+}
+
+fn checkpoint_and_copy(
+    connection: &Connection,
+    db_path: &Path,
+    last_good_path: &Path,
+) -> Result<(), CoreError> {
+    connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+    fs::copy(db_path, last_good_path)?;
+    Ok(())
+}
+
+fn recovery_phase_label(phase: &SkillRecoveryPhase) -> &'static str {
+    match phase {
+        SkillRecoveryPhase::Prepared => "prepared",
+        SkillRecoveryPhase::ExistingMovedToBackup => "existing_moved_to_backup",
+        SkillRecoveryPhase::ReplacementActivated => "replacement_activated",
+    }
+}
+
+fn backup_state_label(state: &BackupState) -> &'static str {
+    match state {
+        BackupState::Available => "available",
+        BackupState::Restored => "restored",
+        BackupState::Removed => "removed",
+    }
+}
+
+fn mcp_recovery_phase_label(phase: &McpRecoveryPhase) -> &'static str {
+    match phase {
+        McpRecoveryPhase::Prepared => "prepared",
+        McpRecoveryPhase::BackupCreated => "backup_created",
+        McpRecoveryPhase::ReplacementActivated => "replacement_activated",
+    }
+}
+
+fn mcp_backup_state_label(state: &McpBackupState) -> &'static str {
+    match state {
+        McpBackupState::Available => "available",
+        McpBackupState::Restored => "restored",
+        McpBackupState::Removed => "removed",
     }
 }
 

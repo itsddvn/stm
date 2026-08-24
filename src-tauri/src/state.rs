@@ -42,13 +42,28 @@ struct RefreshRuntime {
 }
 
 impl AppState {
+    #[cfg(test)]
     pub fn new(manifest_dir: &str) -> Self {
         let project_root = PathBuf::from(manifest_dir)
             .parent()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(manifest_dir));
-        let service = Arc::new(PhaseThreeApplicationService::new(project_root));
+        Self::with_service(Arc::new(PhaseThreeApplicationService::new(project_root)))
+    }
 
+    pub fn new_runtime(manifest_dir: &str) -> Self {
+        let project_root = PathBuf::from(manifest_dir)
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(manifest_dir));
+        let service = Arc::new(
+            PhaseThreeApplicationService::new_runtime(project_root)
+                .expect("desktop runtime requires an available user home directory"),
+        );
+        Self::with_service(service)
+    }
+
+    fn with_service(service: Arc<PhaseThreeApplicationService>) -> Self {
         let mut refresh = RefreshRuntime::default();
         if let Ok(snapshot) = service.current_snapshot() {
             refresh.last_snapshot = Some(snapshot.clone());
@@ -58,7 +73,6 @@ impl AppState {
             refresh.last_snapshot_at = status.last_snapshot_at;
             refresh.warnings = status.warnings;
         }
-
         Self {
             service,
             refresh: Arc::new(Mutex::new(refresh)),
