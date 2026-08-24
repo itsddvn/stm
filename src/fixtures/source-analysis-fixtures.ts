@@ -48,7 +48,9 @@ export function analyzeSourceFixture(kind: SourceKind, submittedUrl: string): So
 
     const normalized = new URL(safeSource);
     normalized.hash = "";
-    const knownSource = normalized.hostname === "github.com" || normalized.hostname.endsWith("githubusercontent.com");
+    const knownSource = normalized.hostname === "github.com"
+      || normalized.hostname === "githubusercontent.com"
+      || normalized.hostname.endsWith(".githubusercontent.com");
     const base = defaults[kind];
     const detectedName = detectName(kind, normalized, base.detectedName);
     const resourceId = slug(detectedName);

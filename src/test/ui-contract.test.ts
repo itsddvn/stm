@@ -170,6 +170,14 @@ describe("fixture-backed UI contract", () => {
       trust: "catalog_match",
       detectedName: "Frontend Design skill",
     });
+    const spoofed = await mockIpcClient.analyzeSource(
+      "skill",
+      "https://evilgithubusercontent.com/frontend-design",
+    );
+    expect(spoofed).toMatchObject({
+      status: "review_ready",
+      trust: "review_required",
+    });
     const blocked = await mockIpcClient.analyzeSource("tool", "http://user:secret@example.com/tool");
     expect(blocked).toMatchObject({
       status: "blocked",

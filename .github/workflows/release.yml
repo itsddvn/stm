@@ -91,7 +91,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - run: pnpm audit --prod --audit-level high
-      - run: cargo install cargo-audit --locked --version 0.21.2
+      - run: cargo install cargo-audit --locked --version 0.22.2
       - run: cargo audit
       - run: pnpm verify:no-secrets
       - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
