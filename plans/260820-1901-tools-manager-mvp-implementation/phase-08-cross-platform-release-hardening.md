@@ -79,7 +79,7 @@ Application updater writes only product release state. Tool receipts and skill r
 
 ## Todo
 
-- [x] UI Contract v1.1 lock passes on every configured release build.
+- [ ] UI Contract v1.1 lock passes on every configured release build; manifest remains `review` pending project-lead approval.
 - [x] OS/architecture matrix has named CI/build/smoke runners and stable versus experimental ownership.
 - [x] Signing/notarization and updater secrets never enter repository or logs.
 - [ ] Invalid signature, downgrade, wrong channel, interrupted download, and corrupted signed artifact rejection pass against real draft artifacts.
@@ -106,11 +106,12 @@ Application updater writes only product release state. Tool receipts and skill r
 - Local verification: UI Contract v1.1, release contract/tooling/secret checks, frontend lint/typecheck/tests, desktop integration, Rust format/clippy/tests, internal Tauri release build, generated release-config build, and packaged launch pass.
 - Runtime UI: signed product fixture shows exact independent plan and recoverable terminal state without tool/skill/MCP receipt reuse.
 - Independent focused correctness and security re-reviews pass with no remaining Blocker/Important or Critical/High finding in the implemented release paths.
-- External blocker: protected Apple/Windows/updater signing credentials and signed fresh-machine/upgrade evidence are unavailable. No public-release-ready claim is made.
+- Apple signed-candidate evidence: release tag `v0.1.0` at `d7c68d0`; GitHub run `32767248945` attempt 2 completed both macOS arm64 and x64 jobs. Each job built signed DMG and updater archives, passed local artifact/checksum verification, `codesign --strict`, Gatekeeper assessment, notarization, provenance attestation, and artifact upload. Downloaded draft assets independently matched GitHub SHA-256, passed bounded artifact verification, and verified four updater signatures across `darwin-aarch64` and `darwin-x86_64`; the exact `latest.json` received a separate signed envelope.
+- Remaining blockers: Windows signing credentials/candidate, Linux/Windows matrix completion, project-lead UI lock approval, and a real previous-version upgrade path. `v0.1.0` is the first signed baseline, so same-version reinstall/restart with schema version 5 was used instead of a nonexistent previous signed release.
 
 ## Risk Assessment
 
-- **Signing credentials unavailable:** produce unsigned internal builds only; do not label public release ready.
+- **Missing platform credentials or evidence:** Apple credentials are configured; Windows signing and remaining public matrix evidence stay release-blocking. Do not label the draft fully public-release ready.
 - **Matrix too broad:** reduce supported targets explicitly based on evidence; retain read-only/unsupported labels elsewhere.
 - **Updater regression:** stage rollout, retain previous signed artifact, and delay manifest promotion until upgrade smoke passes.
 - **Cross-platform UI divergence:** reopen Phase 1, verify the revised interface across affected platforms, bump the contract, and propagate changes before release resumes.
@@ -125,4 +126,4 @@ Application updater writes only product release state. Tool receipts and skill r
 
 ## Next Steps
 
-Provide protected signing/notarization credentials, build the signed draft matrix, complete fresh-machine and previous-version update smoke, adjudicate cross-platform review, then promote updater metadata last. Deferred product scope still requires separate approval.
+Complete Windows signing and the Linux/Windows candidate matrix, obtain project-lead UI Contract approval, run cross-platform fresh-machine checks, and use `v0.1.0` as the signed baseline for the next version's real updater/upgrade smoke. Promote updater metadata last.

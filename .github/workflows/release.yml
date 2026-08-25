@@ -240,6 +240,26 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           args: --config target/release-config/tauri.release.generated.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Notarize, staple, and re-upload Apple disk images
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          while IFS= read -r -d '' disk_image; do
+            xcrun notarytool submit "$disk_image" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+            xcrun stapler staple "$disk_image"
+            xcrun stapler validate "$disk_image"
+            spctl --assess --type open --context context:primary-signature --verbose=2 "$disk_image"
+            gh release upload "$RELEASE_TAG" "$disk_image" --clobber
+          done < <(find "target/${{ matrix.target }}/release/bundle" -type f -name '*.dmg' -print0)
       - name: Build and upload signed Windows draft artifacts
         if: runner.os == 'Windows'
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
@@ -295,6 +315,10 @@ jobs:
           test -n "$app_path"
           codesign --verify --deep --strict --verbose=2 "$app_path"
           spctl --assess --type execute --verbose=2 "$app_path"
+          disk_image="$(find "target/${{ matrix.target }}/release/bundle" -type f -name '*.dmg' -print -quit)"
+          test -n "$disk_image"
+          xcrun stapler validate "$disk_image"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$disk_image"
       - name: Verify Windows Authenticode
         if: runner.os == 'Windows'
         shell: pwsh
