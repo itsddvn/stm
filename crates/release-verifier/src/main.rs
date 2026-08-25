@@ -60,7 +60,7 @@ fn run() -> Result<(), String> {
     let manifest_signature_text =
         String::from_utf8(read_bounded(manifest_signature_path, MAX_MANIFEST_BYTES)?)
             .map_err(|_| "latest.json signature is not UTF-8".to_string())?;
-    let manifest_signature = Signature::decode(manifest_signature_text.trim())
+    let manifest_signature = parse_signature(&manifest_signature_text)
         .map_err(|_| "latest.json signature is malformed".to_string())?;
     public_key
         .verify(&manifest_bytes[..], &manifest_signature, false)
@@ -103,12 +103,16 @@ fn run() -> Result<(), String> {
         let signature_file =
             String::from_utf8(read_bounded(signature_path, MAX_MANIFEST_BYTES)?)
                 .map_err(|_| format!("updater signature file for {platform} is not UTF-8"))?;
-        if signature_file.trim() != entry.signature.trim() {
+        let signature_file_exact = canonical_outer(&signature_file)
+            .map_err(|_| format!("updater signature file for {platform} is not canonical"))?;
+        let entry_signature_exact = canonical_outer(&entry.signature)
+            .map_err(|_| format!("latest.json signature for {platform} is not canonical"))?;
+        if signature_file_exact != entry_signature_exact {
             return Err(format!(
                 "latest.json signature for {platform} differs from its uploaded .sig file"
             ));
         }
-        let signature = Signature::decode(entry.signature.trim())
+        let signature = parse_signature(signature_file_exact)
             .map_err(|_| format!("updater signature for {platform} is malformed"))?;
         verify_stream(&public_key, artifact, &signature)
             .map_err(|_| format!("updater signature for {platform} did not verify"))?;
@@ -125,7 +129,7 @@ fn run() -> Result<(), String> {
         let signature_text =
             String::from_utf8(read_bounded(signature_path, MAX_MANIFEST_BYTES)?)
                 .map_err(|_| format!("native installer signature for {name} is not UTF-8"))?;
-        let signature = Signature::decode(signature_text.trim())
+        let signature = parse_signature(&signature_text)
             .map_err(|_| format!("native installer signature for {name} is malformed"))?;
         verify_stream(&public_key, artifact, &signature)
             .map_err(|_| format!("native installer signature for {name} did not verify"))?;
@@ -170,6 +174,73 @@ fn tauri_minisign_payload(value: &str) -> Option<&str> {
         && id.bytes().all(|byte| byte.is_ascii_hexdigit())
         && key.starts_with("RW"))
     .then_some(key)
+}
+
+fn parse_signature(value: &str) -> Result<Signature, String> {
+    let outer = canonical_outer(value)?;
+    let decoded;
+    let document = if outer.starts_with("untrusted comment: signature from ") {
+        outer
+    } else {
+        decoded = BASE64
+            .decode(outer)
+            .map_err(|_| "signature is neither Minisign text nor Tauri-encoded text")?;
+        if decoded.len() > MAX_MANIFEST_BYTES as usize {
+            return Err("decoded signature exceeds the accepted bound".into());
+        }
+        let decoded =
+            std::str::from_utf8(&decoded).map_err(|_| "decoded signature is not UTF-8")?;
+        canonical_outer(decoded)?
+    };
+    let lines = document.split('\n').collect::<Vec<_>>();
+    if lines.len() != 4
+        || !matches!(
+            lines[0],
+            "untrusted comment: signature from tauri secret key"
+                | "untrusted comment: signature from minisign secret key"
+        )
+        || !is_base64_line(lines[1])
+        || !is_trusted_comment(lines[2])
+        || !is_base64_line(lines[3])
+    {
+        return Err("signature document is not canonical".into());
+    }
+    Signature::decode(document).map_err(|_| "signature document is malformed".into())
+}
+
+fn canonical_outer(value: &str) -> Result<&str, String> {
+    let canonical = value.strip_suffix('\n').unwrap_or(value);
+    if canonical.is_empty()
+        || canonical.starts_with(char::is_whitespace)
+        || canonical.ends_with(char::is_whitespace)
+    {
+        return Err("signature has noncanonical outer whitespace".into());
+    }
+    Ok(canonical)
+}
+
+fn is_trusted_comment(value: &str) -> bool {
+    let Some(fields) = value.strip_prefix("trusted comment: timestamp:") else {
+        return false;
+    };
+    let Some((timestamp, file)) = fields.split_once("\tfile:") else {
+        return false;
+    };
+    let file = file.strip_suffix("\tprehashed").unwrap_or(file);
+    !timestamp.is_empty()
+        && timestamp.bytes().all(|byte| byte.is_ascii_digit())
+        && !file.is_empty()
+        && file.len() <= 255
+        && file
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn is_base64_line(value: &str) -> bool {
+    (40..=4096).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
 }
 
 fn collect_assets(root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
@@ -304,5 +375,27 @@ mod tests {
         assert!(parse_public_key(&BASE64.encode(format!("{key}\n"))).is_err());
         let padded = format!("untrusted comment: minisign public key: 0123456789ABCD\n {key}\n");
         assert!(parse_public_key(&BASE64.encode(padded)).is_err());
+    }
+
+    #[test]
+    fn accepts_tauri_encoded_signature_and_rejects_trailing_material() {
+        let signature = "untrusted comment: signature from minisign secret key\nRUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=\ntrusted comment: timestamp:1633700835\tfile:test\tprehashed\nwLMDjy9FLAuxZ3q4NlEvkgtyhrr0gtTu6KC4KBJdITbbOeAi1zBIYo0v4iTgt8jJpIidRJnp94ABQkJAgAooBQ==\n";
+        parse_signature(&BASE64.encode(signature)).expect("Tauri-encoded signature");
+        let appended = format!("{signature}untrusted comment: extra\n");
+        assert!(parse_signature(&BASE64.encode(appended)).is_err());
+    }
+
+    #[test]
+    fn rejects_signature_whitespace_and_comment_mutation() {
+        let signature = "untrusted comment: signature from minisign secret key\nRUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=\ntrusted comment: timestamp:1633700835\tfile:test\tprehashed\nwLMDjy9FLAuxZ3q4NlEvkgtyhrr0gtTu6KC4KBJdITbbOeAi1zBIYo0v4iTgt8jJpIidRJnp94ABQkJAgAooBQ==\n";
+        let encoded = BASE64.encode(signature);
+        assert!(parse_signature(&format!(" {encoded}")).is_err());
+        assert!(parse_signature(&format!("{encoded}\n\n")).is_err());
+        assert!(parse_signature(&signature.replace(
+            "untrusted comment: signature from minisign secret key",
+            "untrusted comment: signature from minisign secret key appended"
+        ))
+        .is_err());
+        assert!(parse_signature(&signature.replace('\n', "\r\n")).is_err());
     }
 }
